@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable } from '@nestjs/common';
+import { match } from 'ts-pattern';
 import type {
   CreatePokemonRequest,
   ListPokemonResponse,
@@ -174,34 +175,25 @@ export class PokemonService {
       updatedAt: now,
     };
 
-    let pokemon: PokemonVariant;
-
-    switch (body.classification) {
-      case 'legendary':
-        pokemon = {
-          ...base,
-          classification: 'legendary',
-          legendaryGroup: 'Unknown',
-          isBoxLegendary: false,
-        };
-        break;
-      case 'mythical':
-        pokemon = {
-          ...base,
-          classification: 'mythical',
-          distributionMethod: 'Unknown',
-          isCurrentlyDistributed: false,
-          loreDescription: 'A newly discovered Mythical Pokemon.',
-        };
-        break;
-      default:
-        pokemon = {
-          ...base,
-          classification: 'normal',
-          encounterRate: 50,
-        };
-        break;
-    }
+    const pokemon: PokemonVariant = match(body.classification)
+      .with('legendary', (classification) => ({
+        ...base,
+        classification,
+        legendaryGroup: 'Unknown',
+        isBoxLegendary: false,
+      }))
+      .with('mythical', (classification) => ({
+        ...base,
+        classification,
+        distributionMethod: 'Unknown',
+        isCurrentlyDistributed: false,
+        loreDescription: 'A newly discovered Mythical Pokemon.',
+      }))
+      .otherwise((classification) => ({
+        ...base,
+        classification,
+        encounterRate: 50,
+      }));
 
     this.pokemon.push(pokemon);
     return Promise.resolve(pokemon);
@@ -233,49 +225,41 @@ export class PokemonService {
       updatedAt: now,
     };
 
-    let pokemon: PokemonVariant;
-
-    switch (body.classification) {
-      case 'legendary':
-        pokemon = {
-          ...base,
-          classification: 'legendary',
-          legendaryGroup:
-            existing.classification === 'legendary'
-              ? existing.legendaryGroup
-              : 'Unknown',
-          isBoxLegendary:
-            existing.classification === 'legendary'
-              ? existing.isBoxLegendary
-              : false,
-        };
-        break;
-      case 'mythical':
-        pokemon = {
-          ...base,
-          classification: 'mythical',
-          distributionMethod:
-            existing.classification === 'mythical'
-              ? existing.distributionMethod
-              : 'Unknown',
-          isCurrentlyDistributed:
-            existing.classification === 'mythical'
-              ? existing.isCurrentlyDistributed
-              : false,
-          loreDescription:
-            existing.classification === 'mythical'
-              ? existing.loreDescription
-              : 'A newly discovered Mythical Pokemon.',
-        };
-        break;
-      case 'normal':
-        pokemon = {
-          ...base,
-          classification: 'normal',
-          encounterRate: 50,
-        };
-        break;
-    }
+    const pokemon: PokemonVariant = match(body.classification)
+      .with('legendary', (classification) => ({
+        ...base,
+        classification,
+        legendaryGroup:
+          existing.classification === 'legendary'
+            ? existing.legendaryGroup
+            : 'Unknown',
+        isBoxLegendary:
+          existing.classification === 'legendary'
+            ? existing.isBoxLegendary
+            : false,
+      }))
+      .with('mythical', (classification) => ({
+        ...base,
+        classification,
+        distributionMethod:
+          existing.classification === 'mythical'
+            ? existing.distributionMethod
+            : 'Unknown',
+        isCurrentlyDistributed:
+          existing.classification === 'mythical'
+            ? existing.isCurrentlyDistributed
+            : false,
+        loreDescription:
+          existing.classification === 'mythical'
+            ? existing.loreDescription
+            : 'A newly discovered Mythical Pokemon.',
+      }))
+      .with('normal', (classification) => ({
+        ...base,
+        classification,
+        encounterRate: 50,
+      }))
+      .exhaustive();
 
     this.pokemon[index] = pokemon;
     return Promise.resolve(pokemon);
