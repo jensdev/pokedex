@@ -11,14 +11,23 @@ import {
   Query,
 } from '@nestjs/common';
 import { R } from '@praha/byethrow';
-import type { PokedexControllerMethods } from '../generated/nestjs.gen.js';
+import type { PokedexControllerMethods } from '../generated/nestjs.gen';
 import type {
   CreatePokemonData,
   DeletePokemonData,
   GetPokemonByIdData,
   ListPokemonData,
   ReplacePokemonData,
-} from '../generated/types.gen.js';
+} from '../generated/types.gen';
+import {
+  zCreatePokemonBody,
+  zDeletePokemonPath,
+  zGetPokemonByIdPath,
+  zListPokemonQuery,
+  zReplacePokemonBody,
+  zReplacePokemonPath,
+} from '../generated/zod.gen';
+import { ZodPipe } from '../zod.pipe';
 import { PokemonService } from './pokemon.service';
 
 @Controller('pokemon')
@@ -26,18 +35,25 @@ export class PokemonController implements PokedexControllerMethods {
   constructor(private readonly pokemonService: PokemonService) {}
 
   @Get()
-  async listPokemon(@Query() query?: ListPokemonData['query']) {
+  async listPokemon(
+    @Query(new ZodPipe(zListPokemonQuery))
+    query?: ListPokemonData['query'],
+  ) {
     return R.unwrap(await this.pokemonService.list(query));
   }
 
   @Post()
-  async createPokemon(@Body() body: CreatePokemonData['body']) {
+  async createPokemon(
+    @Body(new ZodPipe(zCreatePokemonBody)) body: CreatePokemonData['body'],
+  ) {
     return await this.pokemonService.create(body);
   }
 
   @Get(':id')
-  async getPokemonById(@Param() path: GetPokemonByIdData['path']) {
-    const result = await this.pokemonService.getById(Number(path.id));
+  async getPokemonById(
+    @Param(new ZodPipe(zGetPokemonByIdPath)) path: GetPokemonByIdData['path'],
+  ) {
+    const result = await this.pokemonService.getById(path.id);
 
     if (R.isFailure(result)) {
       throw new NotFoundException(`Pokemon with id ${path.id} not found`);
@@ -48,10 +64,10 @@ export class PokemonController implements PokedexControllerMethods {
 
   @Put(':id')
   async replacePokemon(
-    @Param() path: ReplacePokemonData['path'],
-    @Body() body: ReplacePokemonData['body'],
+    @Param(new ZodPipe(zReplacePokemonPath)) path: ReplacePokemonData['path'],
+    @Body(new ZodPipe(zReplacePokemonBody)) body: ReplacePokemonData['body'],
   ) {
-    const result = await this.pokemonService.replace(Number(path.id), body);
+    const result = await this.pokemonService.replace(path.id, body);
 
     if (R.isFailure(result)) {
       throw new NotFoundException(`Pokemon with id ${path.id} not found`);
@@ -62,8 +78,10 @@ export class PokemonController implements PokedexControllerMethods {
 
   @Delete(':id')
   @HttpCode(204)
-  async deletePokemon(@Param() path: DeletePokemonData['path']) {
-    const result = await this.pokemonService.remove(Number(path.id));
+  async deletePokemon(
+    @Param(new ZodPipe(zDeletePokemonPath)) path: DeletePokemonData['path'],
+  ) {
+    const result = await this.pokemonService.remove(path.id);
 
     if (R.isFailure(result)) {
       throw new NotFoundException(`Pokemon with id ${path.id} not found`);
