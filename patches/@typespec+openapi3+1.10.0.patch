@@ -1,0 +1,20 @@
+diff --git a/node_modules/@typespec/openapi3/dist/src/schema-emitter.js b/node_modules/@typespec/openapi3/dist/src/schema-emitter.js
+index da278ed..4d11353 100644
+--- a/node_modules/@typespec/openapi3/dist/src/schema-emitter.js
++++ b/node_modules/@typespec/openapi3/dist/src/schema-emitter.js
+@@ -512,7 +512,14 @@ export class OpenAPI3SchemaEmitterBase extends TypeEmitter {
+         for (const [key, model] of variants.entries()) {
+             const ref = this.emitter.emitTypeReference(model);
+             compilerAssert(ref.kind === "code", "Unexpected ref schema. Should be kind: code");
+-            mapping[key] = ref.value.$ref;
++            if (ref.value instanceof Placeholder) {
++                ref.value.onValue((resolvedValue) => {
++                    mapping[key] = resolvedValue.$ref;
++                });
++            }
++            else {
++                mapping[key] = ref.value.$ref;
++            }
+         }
+         return mapping;
+     }
