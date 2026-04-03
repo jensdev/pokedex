@@ -1,0 +1,702 @@
+openapi: 3.0.0
+info:
+  title: Nest Pokemon API
+  version: 1.0.0
+  contact:
+    name: Craftzing
+    url: https://craftzing.com
+  license:
+    name: UNLICENSED
+tags:
+  - name: Health
+  - name: Pokedex
+paths:
+  /health:
+    get:
+      operationId: healthCheck
+      summary: Full health check
+      description: |-
+        Full health check with per-component breakdown.
+        Always returns 200 — inspect the `status` field for component state.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Health
+  /health/live:
+    get:
+      operationId: healthLiveness
+      summary: Liveness probe
+      description: |-
+        Kubernetes liveness probe.
+        Returns 200 as long as the process is running.
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LivenessResponse'
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Health
+  /health/ready:
+    get:
+      operationId: healthReadiness
+      summary: Readiness probe
+      description: |-
+        Kubernetes readiness probe.
+        Returns 200 only when the service is ready to accept traffic
+        (i.e. the database connection is available).
+      parameters: []
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Health
+  /pokemon:
+    get:
+      operationId: listPokemon
+      summary: List Pokemon
+      description: List all Pokemon with optional filtering and pagination.
+      parameters:
+        - $ref: '#/components/parameters/PaginationParams.page'
+        - $ref: '#/components/parameters/PaginationParams.pageSize'
+        - $ref: '#/components/parameters/ListPokemonParams.classification'
+        - $ref: '#/components/parameters/ListPokemonParams.type'
+        - $ref: '#/components/parameters/ListPokemonParams.search'
+        - $ref: '#/components/parameters/ListPokemonParams.sortBy'
+        - $ref: '#/components/parameters/ListPokemonParams.sortOrder'
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - items
+                  - total
+                  - page
+                  - pageSize
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PokemonVariant'
+                    description: The items on the current page.
+                  total:
+                    type: integer
+                    format: int32
+                    description: Total number of items across all pages.
+                  page:
+                    type: integer
+                    format: int32
+                    description: Zero-based page index.
+                  pageSize:
+                    type: integer
+                    format: int32
+                    description: Number of items per page.
+                description: Paginated list wrapper used for collection endpoints.
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Pokedex
+    post:
+      operationId: createPokemon
+      summary: Create Pokemon
+      description: Add a new Pokemon entry to the Pokedex.
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PokemonVariant'
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Pokedex
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePokemonRequest'
+  /pokemon/{id}:
+    get:
+      operationId: getPokemonById
+      summary: Get Pokemon by ID
+      description: |-
+        Get a single Pokemon by its national Pokedex number.
+
+        The response body is a discriminated union — the shape depends on the
+        `classification` field: `"normal"`, `"legendary"`, or `"mythical"`.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: National Pokedex number.
+          schema:
+            type: integer
+            format: int32
+            minimum: 1
+            maximum: 1025
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PokemonVariant'
+        '404':
+          description: The server cannot find the requested resource.
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Pokedex
+    put:
+      operationId: replacePokemon
+      summary: Replace Pokemon
+      description: Fully replace an existing Pokemon entry.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PokemonVariant'
+        '404':
+          description: The server cannot find the requested resource.
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Pokedex
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePokemonRequest'
+    delete:
+      operationId: deletePokemon
+      summary: Delete Pokemon
+      description: Remove a Pokemon entry from the Pokedex.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '204':
+          description: There is no content to send for this request, but the headers may be useful.
+        '404':
+          description: The server cannot find the requested resource.
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Pokedex
+components:
+  parameters:
+    ListPokemonParams.classification:
+      name: classification
+      in: query
+      required: false
+      description: Filter by classification.
+      schema:
+        $ref: '#/components/schemas/PokemonClassification'
+      explode: false
+    ListPokemonParams.search:
+      name: search
+      in: query
+      required: false
+      description: Search by partial name (case-insensitive).
+      schema:
+        type: string
+        maxLength: 100
+      explode: false
+    ListPokemonParams.sortBy:
+      name: sortBy
+      in: query
+      required: false
+      description: Field to sort by.
+      schema:
+        type: string
+        enum:
+          - id
+          - name
+          - createdAt
+      explode: false
+    ListPokemonParams.sortOrder:
+      name: sortOrder
+      in: query
+      required: false
+      description: Sort direction.
+      schema:
+        type: string
+        enum:
+          - asc
+          - desc
+      explode: false
+    ListPokemonParams.type:
+      name: type
+      in: query
+      required: false
+      description: Filter by primary or secondary type.
+      schema:
+        $ref: '#/components/schemas/PokemonType'
+      explode: false
+    PaginationParams.page:
+      name: page
+      in: query
+      required: false
+      description: Zero-based page index. Defaults to 0.
+      schema:
+        type: integer
+        format: int32
+        minimum: 0
+        default: 0
+      explode: false
+    PaginationParams.pageSize:
+      name: pageSize
+      in: query
+      required: false
+      description: Number of items per page. Max 100.
+      schema:
+        type: integer
+        format: int32
+        minimum: 1
+        maximum: 100
+        default: 20
+      explode: false
+  schemas:
+    ApiError:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Machine-readable error code.
+        message:
+          type: string
+          description: Human-readable error message.
+        details:
+          type: object
+          additionalProperties:
+            type: string
+          description: Optional additional context about the error.
+      description: Standard error returned for all 4xx/5xx responses.
+    ComponentHealth:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          $ref: '#/components/schemas/HealthStatus'
+        message:
+          type: string
+        latencyMs:
+          type: integer
+          format: int32
+          description: Round-trip latency in milliseconds, if measurable.
+      description: Health status of an individual dependency or subsystem.
+    CreatePokemonRequest:
+      type: object
+      required:
+        - name
+        - primaryType
+        - baseStats
+        - heightMetres
+        - weightKg
+        - isObtainable
+        - classification
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        primaryType:
+          $ref: '#/components/schemas/PokemonType'
+        secondaryType:
+          $ref: '#/components/schemas/PokemonType'
+        baseStats:
+          $ref: '#/components/schemas/PokemonBaseStats'
+        heightMetres:
+          type: number
+          format: float
+          minimum: 0
+        weightKg:
+          type: number
+          format: float
+          minimum: 0
+        isObtainable:
+          type: boolean
+        classification:
+          $ref: '#/components/schemas/PokemonClassification'
+      description: Payload for creating a new Pokemon entry.
+    HealthResponse:
+      type: object
+      required:
+        - status
+        - checkedAt
+        - version
+        - components
+      properties:
+        status:
+          allOf:
+            - $ref: '#/components/schemas/HealthStatus'
+          description: Aggregate status — the worst status across all components.
+        checkedAt:
+          type: string
+          format: date-time
+          description: When this check was performed.
+        version:
+          type: string
+          description: Application version string (e.g. "1.0.0").
+        components:
+          type: object
+          properties:
+            database:
+              $ref: '#/components/schemas/ComponentHealth'
+            cache:
+              $ref: '#/components/schemas/ComponentHealth'
+            externalPokeApi:
+              $ref: '#/components/schemas/ComponentHealth'
+          required:
+            - database
+          description: Per-component health details.
+      description: Response body for health check endpoints.
+    HealthStatus:
+      type: string
+      enum:
+        - healthy
+        - degraded
+        - unhealthy
+      description: Possible states a health check component can be in.
+    LegendaryPokemon:
+      type: object
+      required:
+        - classification
+        - legendaryGroup
+        - isBoxLegendary
+      properties:
+        classification:
+          type: string
+          enum:
+            - legendary
+        legendaryGroup:
+          type: string
+          description: Name of the legendary group or trio (e.g. "Legendary Birds").
+        isBoxLegendary:
+          type: boolean
+          description: Whether this Pokemon is the box mascot of a main series game.
+        mascotForGames:
+          type: array
+          items:
+            type: string
+          description: Game titles for which this Pokemon is the primary mascot, if any.
+      allOf:
+        - $ref: '#/components/schemas/Pokemon'
+      description: |-
+        A Legendary Pokemon — extremely rare, part of a legendary group,
+        cannot be bred.
+    LivenessResponse:
+      type: object
+      required:
+        - status
+        - uptime
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        uptime:
+          type: number
+          format: double
+          description: Process uptime in seconds.
+      description: Liveness probe response — confirms the process is running.
+    MythicalPokemon:
+      type: object
+      required:
+        - classification
+        - distributionMethod
+        - isCurrentlyDistributed
+        - loreDescription
+      properties:
+        classification:
+          type: string
+          enum:
+            - mythical
+        distributionMethod:
+          type: string
+          description: How this Pokemon is distributed (e.g. "Mystery Gift", "in-game event").
+        isCurrentlyDistributed:
+          type: boolean
+          description: Whether an active distribution is currently running.
+        loreDescription:
+          type: string
+          description: In-lore description of this Pokemon's mythical origin.
+      allOf:
+        - $ref: '#/components/schemas/Pokemon'
+      description: |-
+        A Mythical Pokemon — event-only distribution, outside the normal story,
+        typically cannot be caught in the wild.
+    NormalPokemon:
+      type: object
+      required:
+        - classification
+        - encounterRate
+      properties:
+        classification:
+          type: string
+          enum:
+            - normal
+        encounterRate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Encounter rate in the wild (0–100).
+        evolvesInto:
+          type: array
+          items:
+            type: integer
+            format: int32
+          description: National Pokedex IDs of the Pokemon this one can evolve into, if any.
+      allOf:
+        - $ref: '#/components/schemas/Pokemon'
+      description: A regular, catchable Pokemon with no special legendary status.
+    Pokemon:
+      type: object
+      required:
+        - id
+        - name
+        - primaryType
+        - baseStats
+        - heightMetres
+        - weightKg
+        - isObtainable
+        - createdAt
+        - updatedAt
+        - classification
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 1025
+          description: National Pokedex number (e.g. 1 for Bulbasaur).
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Species name in lowercase (e.g. "bulbasaur").
+        primaryType:
+          allOf:
+            - $ref: '#/components/schemas/PokemonType'
+          description: Primary elemental type.
+        secondaryType:
+          allOf:
+            - $ref: '#/components/schemas/PokemonType'
+          description: Secondary elemental type, if any.
+        baseStats:
+          allOf:
+            - $ref: '#/components/schemas/PokemonBaseStats'
+          description: Base stat block.
+        heightMetres:
+          type: number
+          format: float
+          minimum: 0
+          description: Height in metres.
+        weightKg:
+          type: number
+          format: float
+          minimum: 0
+          description: Weight in kilograms.
+        isObtainable:
+          type: boolean
+          description: Whether this Pokemon appears in the wild in main series games.
+        createdAt:
+          type: string
+          format: date-time
+          description: When this entry was added to the Pokedex.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this entry was last updated.
+        classification:
+          type: string
+          description: Discriminator property — narrows to a string literal in each sub-type.
+      discriminator:
+        propertyName: classification
+        mapping:
+          legendary: '#/components/schemas/LegendaryPokemon'
+          mythical: '#/components/schemas/MythicalPokemon'
+          normal: '#/components/schemas/NormalPokemon'
+      description: |-
+        Base Pokemon model. The `classification` property is the discriminator —
+        concrete sub-types narrow it to a string literal.
+    PokemonBaseStats:
+      type: object
+      required:
+        - hp
+        - attack
+        - defense
+        - specialAttack
+        - specialDefense
+        - speed
+      properties:
+        hp:
+          type: integer
+          format: int32
+        attack:
+          type: integer
+          format: int32
+        defense:
+          type: integer
+          format: int32
+        specialAttack:
+          type: integer
+          format: int32
+        specialDefense:
+          type: integer
+          format: int32
+        speed:
+          type: integer
+          format: int32
+      description: Six base stats shared by every Pokemon.
+    PokemonClassification:
+      type: string
+      enum:
+        - normal
+        - legendary
+        - mythical
+      description: Pokemon classification used when creating or filtering Pokemon.
+    PokemonType:
+      type: string
+      enum:
+        - bug
+        - dark
+        - dragon
+        - electric
+        - fairy
+        - fighting
+        - fire
+        - flying
+        - ghost
+        - grass
+        - ground
+        - ice
+        - normal
+        - poison
+        - psychic
+        - rock
+        - steel
+        - water
+      description: Pokemon elemental type.
+    PokemonVariant:
+      anyOf:
+        - $ref: '#/components/schemas/NormalPokemon'
+        - $ref: '#/components/schemas/LegendaryPokemon'
+        - $ref: '#/components/schemas/MythicalPokemon'
+      description: |-
+        Discriminated union of all concrete Pokemon classifications.
+        Used as the return type for Pokedex operations — results in a
+        `oneOf` with `discriminator.mapping` in the generated OpenAPI schema.
+    UpdatePokemonRequest:
+      type: object
+      required:
+        - name
+        - primaryType
+        - baseStats
+        - heightMetres
+        - weightKg
+        - isObtainable
+        - classification
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+        primaryType:
+          $ref: '#/components/schemas/PokemonType'
+        secondaryType:
+          $ref: '#/components/schemas/PokemonType'
+        baseStats:
+          $ref: '#/components/schemas/PokemonBaseStats'
+        heightMetres:
+          type: number
+          format: float
+          minimum: 0
+        weightKg:
+          type: number
+          format: float
+          minimum: 0
+        isObtainable:
+          type: boolean
+        classification:
+          $ref: '#/components/schemas/PokemonClassification'
+      description: Payload for fully replacing an existing Pokemon entry.
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+    variables: {}

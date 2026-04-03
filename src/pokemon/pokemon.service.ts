@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable } from '@nestjs/common';
 import type {
   CreatePokemonRequest,
@@ -30,7 +31,7 @@ export class PokemonService {
       classification: 'normal',
       encounterRate: 45,
       evolvesInto: [2],
-    } as unknown as PokemonVariant,
+    },
     {
       id: 25,
       name: 'pikachu',
@@ -51,7 +52,7 @@ export class PokemonService {
       classification: 'normal',
       encounterRate: 30,
       evolvesInto: [26],
-    } as unknown as PokemonVariant,
+    },
     {
       id: 150,
       name: 'mewtwo',
@@ -198,7 +199,7 @@ export class PokemonService {
           ...base,
           classification: 'normal',
           encounterRate: 50,
-        } as unknown as PokemonVariant;
+        };
         break;
     }
 
@@ -267,12 +268,12 @@ export class PokemonService {
               : 'A newly discovered Mythical Pokemon.',
         };
         break;
-      default:
+      case 'normal':
         pokemon = {
           ...base,
           classification: 'normal',
           encounterRate: 50,
-        } as unknown as PokemonVariant;
+        };
         break;
     }
 

@@ -140,7 +140,7 @@ export type MythicalPokemon = Omit<Pokemon, 'classification'> & {
  * A regular, catchable Pokemon with no special legendary status.
  */
 export type NormalPokemon = Omit<Pokemon, 'classification'> & {
-  classification: 'NormalPokemon';
+  classification: 'normal';
 } & {
   classification: 'normal';
   /**

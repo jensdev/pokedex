@@ -218,7 +218,7 @@ export const zMythicalPokemon = zPokemon
 export const zNormalPokemon = zPokemon
   .and(
     z.object({
-      classification: z.literal('NormalPokemon'),
+      classification: z.literal('normal'),
     }),
   )
   .and(
