@@ -4,13 +4,14 @@ import {
   Delete,
   Get,
   HttpCode,
+  InternalServerErrorException,
   NotFoundException,
   Param,
   Post,
   Put,
   Query,
 } from '@nestjs/common';
-import { R } from '@praha/byethrow';
+import { match } from 'ts-pattern';
 import type { PokedexControllerMethods } from '../generated/nestjs.gen';
 import type {
   CreatePokemonData,
@@ -39,7 +40,13 @@ export class PokemonController implements PokedexControllerMethods {
     @Query(new ZodPipe(zListPokemonQuery))
     query?: ListPokemonData['query'],
   ) {
-    return R.unwrap(await this.pokemonService.list(query));
+    const result = await this.pokemonService.list(query);
+    return match(result)
+      .with({ type: 'Success' }, ({ value }) => value)
+      .with({ type: 'Failure' }, ({ error }) => {
+        throw new InternalServerErrorException(error);
+      })
+      .exhaustive();
   }
 
   @Post()
@@ -54,12 +61,17 @@ export class PokemonController implements PokedexControllerMethods {
     @Param(new ZodPipe(zGetPokemonByIdPath)) path: GetPokemonByIdData['path'],
   ) {
     const result = await this.pokemonService.getById(path.id);
-
-    if (R.isFailure(result)) {
-      throw new NotFoundException(`Pokemon with id ${path.id} not found`);
-    }
-
-    return R.unwrap(result);
+    return match(result)
+      .with({ type: 'Success' }, ({ value }) => value)
+      .with(
+        { type: 'Failure', error: { name: 'PokemonNotFoundError' } },
+        () => {
+          throw new NotFoundException(`Pokemon with id ${path.id} not found`);
+        },
+      )
+      .otherwise(({ error }) => {
+        throw new InternalServerErrorException(error);
+      });
   }
 
   @Put(':id')
@@ -68,12 +80,12 @@ export class PokemonController implements PokedexControllerMethods {
     @Body(new ZodPipe(zReplacePokemonBody)) body: ReplacePokemonData['body'],
   ) {
     const result = await this.pokemonService.replace(path.id, body);
-
-    if (R.isFailure(result)) {
-      throw new NotFoundException(`Pokemon with id ${path.id} not found`);
-    }
-
-    return R.unwrap(result);
+    return match(result)
+      .with({ type: 'Success' }, ({ value }) => value)
+      .with({ type: 'Failure' }, () => {
+        throw new NotFoundException(`Pokemon with id ${path.id} not found`);
+      })
+      .exhaustive();
   }
 
   @Delete(':id')
@@ -82,9 +94,11 @@ export class PokemonController implements PokedexControllerMethods {
     @Param(new ZodPipe(zDeletePokemonPath)) path: DeletePokemonData['path'],
   ) {
     const result = await this.pokemonService.remove(path.id);
-
-    if (R.isFailure(result)) {
-      throw new NotFoundException(`Pokemon with id ${path.id} not found`);
-    }
+    match(result)
+      .with({ type: 'Success' }, () => {})
+      .with({ type: 'Failure' }, () => {
+        throw new NotFoundException(`Pokemon with id ${path.id} not found`);
+      })
+      .exhaustive();
   }
 }
