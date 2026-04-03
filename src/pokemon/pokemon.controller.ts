@@ -22,14 +22,7 @@ import type {
 import { PokemonService } from './pokemon.service';
 
 @Controller('pokemon')
-export class PokemonController implements Pick<
-  PokedexControllerMethods,
-  | 'listPokemon'
-  | 'createPokemon'
-  | 'getPokemonById'
-  | 'replacePokemon'
-  | 'deletePokemon'
-> {
+export class PokemonController implements PokedexControllerMethods {
   constructor(private readonly pokemonService: PokemonService) {}
 
   @Get()
