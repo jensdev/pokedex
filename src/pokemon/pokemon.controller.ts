@@ -10,6 +10,7 @@ import {
   Put,
   Query,
 } from '@nestjs/common';
+import { R } from '@praha/byethrow';
 import type { PokedexControllerMethods } from '../generated/nestjs.gen.js';
 import type {
   CreatePokemonData,
@@ -33,7 +34,7 @@ export class PokemonController implements Pick<
 
   @Get()
   async listPokemon(@Query() query?: ListPokemonData['query']) {
-    return await this.pokemonService.list(query);
+    return R.unwrap(await this.pokemonService.list(query));
   }
 
   @Post()
@@ -43,13 +44,13 @@ export class PokemonController implements Pick<
 
   @Get(':id')
   async getPokemonById(@Param() path: GetPokemonByIdData['path']) {
-    const pokemon = await this.pokemonService.getById(Number(path.id));
+    const result = await this.pokemonService.getById(Number(path.id));
 
-    if (!pokemon) {
+    if (R.isFailure(result)) {
       throw new NotFoundException(`Pokemon with id ${path.id} not found`);
     }
 
-    return pokemon;
+    return R.unwrap(result);
   }
 
   @Put(':id')
@@ -57,21 +58,21 @@ export class PokemonController implements Pick<
     @Param() path: ReplacePokemonData['path'],
     @Body() body: ReplacePokemonData['body'],
   ) {
-    const pokemon = await this.pokemonService.replace(Number(path.id), body);
+    const result = await this.pokemonService.replace(Number(path.id), body);
 
-    if (!pokemon) {
+    if (R.isFailure(result)) {
       throw new NotFoundException(`Pokemon with id ${path.id} not found`);
     }
 
-    return pokemon;
+    return R.unwrap(result);
   }
 
   @Delete(':id')
   @HttpCode(204)
   async deletePokemon(@Param() path: DeletePokemonData['path']) {
-    const deleted = await this.pokemonService.remove(Number(path.id));
+    const result = await this.pokemonService.remove(Number(path.id));
 
-    if (!deleted) {
+    if (R.isFailure(result)) {
       throw new NotFoundException(`Pokemon with id ${path.id} not found`);
     }
   }

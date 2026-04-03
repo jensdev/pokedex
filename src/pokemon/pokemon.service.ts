@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment */
 import { Injectable } from '@nestjs/common';
+import { R, Result } from '@praha/byethrow';
 import { match } from 'ts-pattern';
 import type {
   CreatePokemonRequest,
@@ -8,6 +9,7 @@ import type {
   UpdatePokemonRequest,
 } from '../generated/types.gen.js';
 import { POKEMON } from './pokemon.constants';
+import { PokemonNotFoundError } from './pokemon.errors';
 
 @Injectable()
 export class PokemonService {
@@ -23,7 +25,7 @@ export class PokemonService {
     search?: string;
     sortBy?: string;
     sortOrder?: string;
-  }): Promise<ListPokemonResponse> {
+  }): Result.ResultAsync<ListPokemonResponse, Error> {
     const {
       page = 0,
       pageSize = 20,
@@ -34,49 +36,61 @@ export class PokemonService {
       sortOrder,
     } = query ?? {};
 
-    let results = [...this.pokemon];
-
-    if (classification) {
-      results = results.filter((p) => p.classification === classification);
-    }
-
-    if (type) {
-      results = results.filter(
-        (p) => p.primaryType === type || p.secondaryType === type,
-      );
-    }
-
-    if (search) {
-      const searchLower = search.toLowerCase();
-      results = results.filter((p) =>
-        p.name.toLowerCase().includes(searchLower),
-      );
-    }
-
-    if (sortBy) {
-      const order = sortOrder === 'desc' ? -1 : 1;
-      results = results.toSorted((a, b) => {
-        const aVal = a[sortBy as keyof typeof a];
-        const bVal = b[sortBy as keyof typeof b];
-        if (typeof aVal === 'string' && typeof bVal === 'string') {
-          return aVal.localeCompare(bVal) * order;
-        }
-        return ((aVal as number) - (bVal as number)) * order;
-      });
-    }
-
-    const start = page * pageSize;
-
-    return Promise.resolve({
-      items: results.slice(start, start + pageSize),
-      total: results.length,
-      page,
-      pageSize,
-    });
+    return Promise.resolve(
+      R.pipe(
+        R.succeed([...this.pokemon]),
+        R.map((items) =>
+          classification
+            ? items.filter((p) => p.classification === classification)
+            : items,
+        ),
+        R.map((items) =>
+          type
+            ? items.filter(
+                (p) => p.primaryType === type || p.secondaryType === type,
+              )
+            : items,
+        ),
+        R.map((items) => {
+          if (!search) {
+            return items;
+          }
+          const searchLower = search.toLowerCase();
+          return items.filter(({ name }) =>
+            name.toLowerCase().includes(searchLower),
+          );
+        }),
+        R.map((items) => {
+          if (!sortBy) {
+            return items;
+          }
+          const order = sortOrder === 'desc' ? -1 : 1;
+          return items.toSorted((a, b) => {
+            const aVal = a[sortBy as keyof typeof a];
+            const bVal = b[sortBy as keyof typeof b];
+            if (typeof aVal === 'string' && typeof bVal === 'string') {
+              return aVal.localeCompare(bVal) * order;
+            }
+            return ((aVal as number) - (bVal as number)) * order;
+          });
+        }),
+        R.map((items) => ({
+          items: items.slice(page * pageSize, (page + 1) * pageSize),
+          total: items.length,
+          page,
+          pageSize,
+        })),
+      ),
+    );
   }
 
-  getById(id: number): Promise<PokemonVariant | undefined> {
-    return Promise.resolve(this.pokemon.find((p) => p.id === id));
+  getById(
+    id: number,
+  ): Result.ResultAsync<PokemonVariant, PokemonNotFoundError> {
+    const pokemon = this.pokemon.find((p) => p.id === id);
+    return Promise.resolve(
+      pokemon ? R.succeed(pokemon) : R.fail(new PokemonNotFoundError()),
+    );
   }
 
   create(body: CreatePokemonRequest): Promise<PokemonVariant> {
@@ -122,11 +136,11 @@ export class PokemonService {
   replace(
     id: number,
     body: UpdatePokemonRequest,
-  ): Promise<PokemonVariant | undefined> {
+  ): Result.ResultAsync<PokemonVariant, PokemonNotFoundError> {
     const index = this.pokemon.findIndex((p) => p.id === id);
 
     if (index === -1) {
-      return Promise.resolve(undefined);
+      return Promise.resolve(R.fail(new PokemonNotFoundError()));
     }
 
     const now = new Date().toISOString();
@@ -182,17 +196,17 @@ export class PokemonService {
       .exhaustive();
 
     this.pokemon[index] = pokemon;
-    return Promise.resolve(pokemon);
+    return Promise.resolve(R.succeed(pokemon));
   }
 
-  remove(id: number): Promise<boolean> {
+  remove(id: number): Result.ResultAsync<void, PokemonNotFoundError> {
     const index = this.pokemon.findIndex((p) => p.id === id);
 
     if (index === -1) {
-      return Promise.resolve(false);
+      return Promise.resolve(R.fail(new PokemonNotFoundError()));
     }
 
     this.pokemon.splice(index, 1);
-    return Promise.resolve(true);
+    return Promise.resolve(R.succeed(undefined));
   }
 }
