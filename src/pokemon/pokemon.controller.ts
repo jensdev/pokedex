@@ -63,15 +63,10 @@ export class PokemonController implements PokedexControllerMethods {
     const result = await this.pokemonService.getById(path.id);
     return match(result)
       .with({ type: 'Success' }, ({ value }) => value)
-      .with(
-        { type: 'Failure', error: { name: 'PokemonNotFoundError' } },
-        () => {
-          throw new NotFoundException(`Pokemon with id ${path.id} not found`);
-        },
-      )
-      .otherwise(({ error }) => {
-        throw new InternalServerErrorException(error);
-      });
+      .with({ type: 'Failure' }, () => {
+        throw new NotFoundException(`Pokemon with id ${path.id} not found`);
+      })
+      .exhaustive();
   }
 
   @Put(':id')

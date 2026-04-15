@@ -1,6 +1,4 @@
-import { PokemonVariant } from 'src/generated';
-
-export const POKEMON: PokemonVariant[] = [
+export const rawPokemon: unknown = [
   {
     id: 1,
     name: 'bulbasaur',
