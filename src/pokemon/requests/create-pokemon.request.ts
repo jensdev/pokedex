@@ -5,19 +5,18 @@ import { zCreatePokemonBody } from '../../generated/zod.gen.js';
 import { ZodPipe } from '../../zod.pipe.js';
 import {
   CreatePokemonCommand,
-  CreatePokemonCommandHandler,
 } from '../commands/create-pokemon.command.js';
 
 @Controller('pokemon')
 export class CreatePokemonRequest
   implements Pick<PokedexControllerMethods, 'createPokemon'>
 {
-  constructor(private readonly handler: CreatePokemonCommandHandler) {}
+  constructor(private readonly command: CreatePokemonCommand) {}
 
   @Post()
   async createPokemon(
     @Body(new ZodPipe(zCreatePokemonBody)) body: CreatePokemonData['body'],
   ) {
-    return await this.handler.execute(new CreatePokemonCommand(body));
+    return await this.command.handle(body);
   }
 }

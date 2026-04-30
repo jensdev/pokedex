@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { HealthCheckQueryHandler } from './queries/health-check.query.js';
-import { HealthLivenessQueryHandler } from './queries/health-liveness.query.js';
-import { HealthReadinessQueryHandler } from './queries/health-readiness.query.js';
+import { HealthCheckQuery } from './queries/health-check.query.js';
+import { HealthLivenessQuery } from './queries/health-liveness.query.js';
+import { HealthReadinessQuery } from './queries/health-readiness.query.js';
 import {
   HealthCheckRequest,
 } from './requests/health-check.request.js';
@@ -19,9 +19,9 @@ import {
     HealthReadinessRequest,
   ],
   providers: [
-    HealthCheckQueryHandler,
-    HealthLivenessQueryHandler,
-    HealthReadinessQueryHandler,
+    HealthCheckQuery,
+    HealthLivenessQuery,
+    HealthReadinessQuery,
   ],
 })
 export class HealthModule {}

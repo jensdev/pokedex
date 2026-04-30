@@ -9,22 +9,19 @@ import type { PokedexControllerMethods } from '../../generated/nestjs.gen.js';
 import type { ListPokemonData } from '../../generated/types.gen.js';
 import { zListPokemonQuery } from '../../generated/zod.gen.js';
 import { ZodPipe } from '../../zod.pipe.js';
-import {
-  ListPokemonsQuery,
-  ListPokemonsQueryHandler,
-} from '../queries/list-pokemons.query.js';
+import { ListPokemonsQuery } from '../queries/list-pokemons.query.js';
 
 @Controller('pokemon')
 export class ListPokemonsRequest
   implements Pick<PokedexControllerMethods, 'listPokemon'>
 {
-  constructor(private readonly handler: ListPokemonsQueryHandler) {}
+  constructor(private readonly query: ListPokemonsQuery) {}
 
   @Get()
   async listPokemon(
     @Query(new ZodPipe(zListPokemonQuery)) query?: ListPokemonData['query'],
   ) {
-    const result = await this.handler.execute(new ListPokemonsQuery(query));
+    const result = await this.query.get(query);
 
     return match(result)
       .with({ type: 'Success' }, ({ value }) => value)

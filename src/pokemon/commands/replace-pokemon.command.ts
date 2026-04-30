@@ -8,27 +8,21 @@ import type {
 import { PokemonNotFoundError } from '../pokemon.errors.js';
 import { PokemonRepository } from '../pokemon.repository.js';
 
-export class ReplacePokemonCommand {
-  constructor(
-    public readonly id: number,
-    public readonly body: UpdatePokemonRequest,
-  ) {}
-}
-
 @Injectable()
-export class ReplacePokemonCommandHandler {
+export class ReplacePokemonCommand {
   constructor(private readonly repository: PokemonRepository) {}
 
-  execute(
-    command: ReplacePokemonCommand,
+  handle(
+    id: number,
+    body: UpdatePokemonRequest,
   ): Result.ResultAsync<PokemonVariant, PokemonNotFoundError> {
-    const index = this.repository.findIndexById(command.id);
+    const index = this.repository.findIndexById(id);
 
     if (index === -1) {
       return Promise.resolve(R.fail(new PokemonNotFoundError()));
     }
 
-    const existing = this.repository.findById(command.id);
+    const existing = this.repository.findById(id);
     if (!existing) {
       return Promise.resolve(R.fail(new PokemonNotFoundError()));
     }
@@ -36,18 +30,18 @@ export class ReplacePokemonCommandHandler {
     const now = new Date().toISOString();
     const base = {
       id: existing.id,
-      name: command.body.name,
-      primaryType: command.body.primaryType,
-      secondaryType: command.body.secondaryType,
-      baseStats: command.body.baseStats,
-      heightMetres: command.body.heightMetres,
-      weightKg: command.body.weightKg,
-      isObtainable: command.body.isObtainable,
+      name: body.name,
+      primaryType: body.primaryType,
+      secondaryType: body.secondaryType,
+      baseStats: body.baseStats,
+      heightMetres: body.heightMetres,
+      weightKg: body.weightKg,
+      isObtainable: body.isObtainable,
       createdAt: existing.createdAt,
       updatedAt: now,
     };
 
-    const pokemon: PokemonVariant = match(command.body.classification)
+    const pokemon: PokemonVariant = match(body.classification)
       .with('legendary', (classification) => ({
         ...base,
         classification,

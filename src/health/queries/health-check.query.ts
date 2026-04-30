@@ -1,11 +1,9 @@
 import { Injectable } from '@nestjs/common';
 import type { HealthCheckResponse } from '../../generated/types.gen.js';
 
-export class HealthCheckQuery {}
-
 @Injectable()
-export class HealthCheckQueryHandler {
-  async execute(_: HealthCheckQuery): Promise<HealthCheckResponse> {
+export class HealthCheckQuery {
+  async get(): Promise<HealthCheckResponse> {
     return Promise.resolve({
       status: 'healthy',
       checkedAt: new Date().toISOString(),

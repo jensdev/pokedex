@@ -1,7 +1,7 @@
 import { Module } from '@nestjs/common';
-import { CreatePokemonCommandHandler } from './commands/create-pokemon.command.js';
-import { DeletePokemonCommandHandler } from './commands/delete-pokemon.command.js';
-import { ReplacePokemonCommandHandler } from './commands/replace-pokemon.command.js';
+import { CreatePokemonCommand } from './commands/create-pokemon.command.js';
+import { DeletePokemonCommand } from './commands/delete-pokemon.command.js';
+import { ReplacePokemonCommand } from './commands/replace-pokemon.command.js';
 import { PokemonRepository } from './pokemon.repository.js';
 import {
   CreatePokemonRequest,
@@ -18,8 +18,8 @@ import {
 import {
   ReplacePokemonRequest,
 } from './requests/replace-pokemon.request.js';
-import { GetPokemonByIdQueryHandler } from './queries/get-pokemon-by-id.query.js';
-import { ListPokemonsQueryHandler } from './queries/list-pokemons.query.js';
+import { GetPokemonByIdQuery } from './queries/get-pokemon-by-id.query.js';
+import { ListPokemonsQuery } from './queries/list-pokemons.query.js';
 
 @Module({
   controllers: [
@@ -31,11 +31,11 @@ import { ListPokemonsQueryHandler } from './queries/list-pokemons.query.js';
   ],
   providers: [
     PokemonRepository,
-    ListPokemonsQueryHandler,
-    GetPokemonByIdQueryHandler,
-    CreatePokemonCommandHandler,
-    ReplacePokemonCommandHandler,
-    DeletePokemonCommandHandler,
+    ListPokemonsQuery,
+    GetPokemonByIdQuery,
+    CreatePokemonCommand,
+    ReplacePokemonCommand,
+    DeletePokemonCommand,
   ],
 })
 export class PokemonModule {}

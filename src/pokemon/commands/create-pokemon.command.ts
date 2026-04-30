@@ -6,31 +6,27 @@ import type {
 } from '../../generated/types.gen.js';
 import { PokemonRepository } from '../pokemon.repository.js';
 
-export class CreatePokemonCommand {
-  constructor(public readonly body: CreatePokemonRequest) {}
-}
-
 @Injectable()
-export class CreatePokemonCommandHandler {
+export class CreatePokemonCommand {
   constructor(private readonly repository: PokemonRepository) {}
 
-  async execute(command: CreatePokemonCommand): Promise<PokemonVariant> {
+  async handle(body: CreatePokemonRequest): Promise<PokemonVariant> {
     const now = new Date().toISOString();
 
     const base = {
       id: this.repository.nextId(),
-      name: command.body.name,
-      primaryType: command.body.primaryType,
-      secondaryType: command.body.secondaryType,
-      baseStats: command.body.baseStats,
-      heightMetres: command.body.heightMetres,
-      weightKg: command.body.weightKg,
-      isObtainable: command.body.isObtainable,
+      name: body.name,
+      primaryType: body.primaryType,
+      secondaryType: body.secondaryType,
+      baseStats: body.baseStats,
+      heightMetres: body.heightMetres,
+      weightKg: body.weightKg,
+      isObtainable: body.isObtainable,
       createdAt: now,
       updatedAt: now,
     };
 
-    const pokemon: PokemonVariant = match(command.body.classification)
+    const pokemon: PokemonVariant = match(body.classification)
       .with('legendary', (classification) => ({
         ...base,
         classification,

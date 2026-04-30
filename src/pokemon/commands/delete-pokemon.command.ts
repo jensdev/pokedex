@@ -3,18 +3,12 @@ import { R, Result } from '@praha/byethrow';
 import { PokemonNotFoundError } from '../pokemon.errors.js';
 import { PokemonRepository } from '../pokemon.repository.js';
 
-export class DeletePokemonCommand {
-  constructor(public readonly id: number) {}
-}
-
 @Injectable()
-export class DeletePokemonCommandHandler {
+export class DeletePokemonCommand {
   constructor(private readonly repository: PokemonRepository) {}
 
-  execute(
-    command: DeletePokemonCommand,
-  ): Result.ResultAsync<void, PokemonNotFoundError> {
-    const index = this.repository.findIndexById(command.id);
+  handle(id: number): Result.ResultAsync<void, PokemonNotFoundError> {
+    const index = this.repository.findIndexById(id);
 
     if (index === -1) {
       return Promise.resolve(R.fail(new PokemonNotFoundError()));

@@ -3,30 +3,16 @@ import { Injectable } from '@nestjs/common';
 import { R, Result } from '@praha/byethrow';
 import * as z from 'zod';
 import { zPokemonVariant } from '../../generated/zod.gen.js';
-import type { ListPokemonResponse } from '../../generated/types.gen.js';
+import type { ListPokemonData, ListPokemonResponse } from '../../generated/types.gen.js';
 import { PokemonDataParseError } from '../pokemon.errors.js';
 import { PokemonRepository } from '../pokemon.repository.js';
 
-type ListPokemonParams = {
-  page?: number;
-  pageSize?: number;
-  classification?: string;
-  type?: string;
-  search?: string;
-  sortBy?: string;
-  sortOrder?: string;
-};
-
-export class ListPokemonsQuery {
-  constructor(public readonly params?: ListPokemonParams) {}
-}
-
 @Injectable()
-export class ListPokemonsQueryHandler {
+export class ListPokemonsQuery {
   constructor(private readonly repository: PokemonRepository) {}
 
-  async execute(
-    query: ListPokemonsQuery,
+  async get(
+    query?: ListPokemonData['query'],
   ): Result.ResultAsync<ListPokemonResponse, PokemonDataParseError> {
     const raw = await this.repository.fetchRaw();
     const parsed = z.array(zPokemonVariant).safeParse(raw);
@@ -43,7 +29,7 @@ export class ListPokemonsQueryHandler {
       search,
       sortBy,
       sortOrder,
-    } = query.params ?? {};
+    } = query ?? {};
 
     return R.pipe(
       R.succeed(parsed.data),
