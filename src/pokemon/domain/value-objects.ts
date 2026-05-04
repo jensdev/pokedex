@@ -37,7 +37,9 @@ export class Height {
 
   static create(metres: number): Height {
     if (metres <= 0) {
-      throw new InvalidMeasurementException('Height must be greater than zero.');
+      throw new InvalidMeasurementException(
+        'Height must be greater than zero.',
+      );
     }
     return new Height(metres);
   }
@@ -48,7 +50,9 @@ export class Weight {
 
   static create(kg: number): Weight {
     if (kg <= 0) {
-      throw new InvalidMeasurementException('Weight must be greater than zero.');
+      throw new InvalidMeasurementException(
+        'Weight must be greater than zero.',
+      );
     }
     return new Weight(kg);
   }

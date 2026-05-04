@@ -7,8 +7,8 @@ import type {
   UpdatePokemonRequest,
 } from '../../../generated/types.gen.js';
 import { PokemonNotFoundError } from '../../domain/pokemon.errors.js';
-import type { IPokemonRepository } from "../../domain/pokemon.repository.interface.js";
-import {  POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
+import type { IPokemonRepository } from '../../domain/pokemon.repository.interface.js';
+import { POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
 
 @Injectable()
 export class ReplacePokemonCommand {

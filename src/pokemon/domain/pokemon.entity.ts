@@ -1,5 +1,9 @@
 import { match } from 'ts-pattern';
-import type { PokemonVariant, PokemonType, PokemonClassification } from '../../generated/types.gen.js';
+import type {
+  PokemonVariant,
+  PokemonType,
+  PokemonClassification,
+} from '../../generated/types.gen.js';
 import { Stats, Height, Weight } from './value-objects.js';
 
 export interface CreatePokemonProps {

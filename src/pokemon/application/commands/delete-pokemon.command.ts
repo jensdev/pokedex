@@ -1,8 +1,8 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { R, Result } from '@praha/byethrow';
 import { PokemonNotFoundError } from '../../domain/pokemon.errors.js';
-import type { IPokemonRepository } from "../../domain/pokemon.repository.interface.js";
-import {  POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
+import type { IPokemonRepository } from '../../domain/pokemon.repository.interface.js';
+import { POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
 
 @Injectable()
 export class DeletePokemonCommand {
