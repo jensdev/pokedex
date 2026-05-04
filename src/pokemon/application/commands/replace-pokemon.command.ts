@@ -1,16 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Pokemon } from '../../domain/pokemon.entity.js';
+import { Inject, Injectable } from '@nestjs/common';
 import { R, Result } from '@praha/byethrow';
 import { match } from 'ts-pattern';
 import type {
   PokemonVariant,
   UpdatePokemonRequest,
-} from '../../generated/types.gen.js';
-import { PokemonNotFoundError } from '../pokemon.errors.js';
-import { PokemonRepository } from '../pokemon.repository.js';
+} from '../../../generated/types.gen.js';
+import { PokemonNotFoundError } from '../../domain/pokemon.errors.js';
+import type { IPokemonRepository } from "../../domain/pokemon.repository.interface.js";
+import {  POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
 
 @Injectable()
 export class ReplacePokemonCommand {
-  constructor(private readonly repository: PokemonRepository) {}
+  constructor(
+    @Inject(POKEMON_REPOSITORY_TOKEN)
+    private readonly repository: IPokemonRepository,
+  ) {}
 
   handle(
     id: number,
@@ -22,10 +27,12 @@ export class ReplacePokemonCommand {
       return Promise.resolve(R.fail(new PokemonNotFoundError()));
     }
 
-    const existing = this.repository.findById(id);
-    if (!existing) {
+    const existingEntity = this.repository.findById(id);
+    if (!existingEntity) {
       return Promise.resolve(R.fail(new PokemonNotFoundError()));
     }
+
+    const existing = existingEntity.toDto();
 
     const now = new Date().toISOString();
     const base = {
@@ -77,7 +84,9 @@ export class ReplacePokemonCommand {
       }))
       .exhaustive();
 
-    this.repository.replace(index, pokemon);
-    return Promise.resolve(R.succeed(pokemon));
+    const updatedEntity = Pokemon.load(pokemon);
+
+    this.repository.replace(index, updatedEntity);
+    return Promise.resolve(R.succeed(updatedEntity.toDto()));
   }
 }

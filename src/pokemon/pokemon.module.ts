@@ -1,15 +1,16 @@
 import { Module } from '@nestjs/common';
-import { CreatePokemonCommand } from './commands/create-pokemon.command.js';
-import { DeletePokemonCommand } from './commands/delete-pokemon.command.js';
-import { ReplacePokemonCommand } from './commands/replace-pokemon.command.js';
-import { PokemonRepository } from './pokemon.repository.js';
-import { CreatePokemonRequest } from './requests/create-pokemon.request.js';
-import { DeletePokemonRequest } from './requests/delete-pokemon.request.js';
-import { GetPokemonByIdRequest } from './requests/get-pokemon-by-id.request.js';
-import { ListPokemonsRequest } from './requests/list-pokemons.request.js';
-import { ReplacePokemonRequest } from './requests/replace-pokemon.request.js';
-import { GetPokemonByIdQuery } from './queries/get-pokemon-by-id.query.js';
-import { ListPokemonsQuery } from './queries/list-pokemons.query.js';
+import { CreatePokemonCommand } from './application/commands/create-pokemon.command.js';
+import { DeletePokemonCommand } from './application/commands/delete-pokemon.command.js';
+import { ReplacePokemonCommand } from './application/commands/replace-pokemon.command.js';
+import { PokemonRepository } from './infrastructure/persistence/pokemon.repository.js';
+import { POKEMON_REPOSITORY_TOKEN } from './domain/pokemon.repository.interface.js';
+import { CreatePokemonRequest } from './presentation/requests/create-pokemon.request.js';
+import { DeletePokemonRequest } from './presentation/requests/delete-pokemon.request.js';
+import { GetPokemonByIdRequest } from './presentation/requests/get-pokemon-by-id.request.js';
+import { ListPokemonsRequest } from './presentation/requests/list-pokemons.request.js';
+import { ReplacePokemonRequest } from './presentation/requests/replace-pokemon.request.js';
+import { GetPokemonByIdQuery } from './application/queries/get-pokemon-by-id.query.js';
+import { ListPokemonsQuery } from './application/queries/list-pokemons.query.js';
 
 @Module({
   controllers: [
@@ -20,7 +21,10 @@ import { ListPokemonsQuery } from './queries/list-pokemons.query.js';
     DeletePokemonRequest,
   ],
   providers: [
-    PokemonRepository,
+    {
+      provide: POKEMON_REPOSITORY_TOKEN,
+      useClass: PokemonRepository,
+    },
     ListPokemonsQuery,
     GetPokemonByIdQuery,
     CreatePokemonCommand,

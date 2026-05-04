@@ -6,11 +6,11 @@ import {
   Param,
 } from '@nestjs/common';
 import { match } from 'ts-pattern';
-import type { PokedexControllerMethods } from '../../generated/nestjs.gen.js';
-import type { DeletePokemonData } from '../../generated/types.gen.js';
-import { zDeletePokemonPath } from '../../generated/zod.gen.js';
-import { ZodPipe } from '../../zod.pipe.js';
-import { DeletePokemonCommand } from '../commands/delete-pokemon.command.js';
+import type { PokedexControllerMethods } from '../../../generated/nestjs.gen.js';
+import type { DeletePokemonData } from '../../../generated/types.gen.js';
+import { zDeletePokemonPath } from '../../../generated/zod.gen.js';
+import { ZodPipe } from '../../../zod.pipe.js';
+import { DeletePokemonCommand } from '../../application/commands/delete-pokemon.command.js';
 
 @Controller('pokemon')
 export class DeletePokemonRequest implements Pick<
