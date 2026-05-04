@@ -7,15 +7,24 @@ import type {
   TDataShape,
 } from './client/index.js';
 import type {
+  CatchPokemonData,
+  CatchPokemonErrors,
+  CatchPokemonResponses,
   CreatePokemonData,
   CreatePokemonErrors,
   CreatePokemonResponses,
+  CreateTrainerData,
+  CreateTrainerErrors,
+  CreateTrainerResponses,
   DeletePokemonData,
   DeletePokemonErrors,
   DeletePokemonResponses,
   GetPokemonByIdData,
   GetPokemonByIdErrors,
   GetPokemonByIdResponses,
+  GetTrainerByIdData,
+  GetTrainerByIdErrors,
+  GetTrainerByIdResponses,
   HealthCheckData,
   HealthCheckErrors,
   HealthCheckResponses,
@@ -177,6 +186,62 @@ export const replacePokemon = <ThrowOnError extends boolean = false>(
     ThrowOnError
   >({
     url: '/pokemon/{id}',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Create Trainer
+ *
+ * Register a new Trainer.
+ */
+export const createTrainer = <ThrowOnError extends boolean = false>(
+  options: Options<CreateTrainerData, ThrowOnError>,
+) =>
+  (options.client ?? client).post<
+    CreateTrainerResponses,
+    CreateTrainerErrors,
+    ThrowOnError
+  >({
+    url: '/trainers',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get Trainer by ID
+ *
+ * Get a Trainer by ID.
+ */
+export const getTrainerById = <ThrowOnError extends boolean = false>(
+  options: Options<GetTrainerByIdData, ThrowOnError>,
+) =>
+  (options.client ?? client).get<
+    GetTrainerByIdResponses,
+    GetTrainerByIdErrors,
+    ThrowOnError
+  >({ url: '/trainers/{id}', ...options });
+
+/**
+ * Catch Pokemon
+ *
+ * Catch a Pokemon for a specific Trainer.
+ */
+export const catchPokemon = <ThrowOnError extends boolean = false>(
+  options: Options<CatchPokemonData, ThrowOnError>,
+) =>
+  (options.client ?? client).post<
+    CatchPokemonResponses,
+    CatchPokemonErrors,
+    ThrowOnError
+  >({
+    url: '/trainers/{id}/catch',
     ...options,
     headers: {
       'Content-Type': 'application/json',

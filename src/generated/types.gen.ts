@@ -25,6 +25,41 @@ export type ApiError = {
 };
 
 /**
+ * A Pokemon that has been captured by a Trainer.
+ */
+export type CapturedPokemon = {
+  /**
+   * The unique identifier of the capture.
+   */
+  id: number;
+  /**
+   * National Pokedex number of the captured Pokemon.
+   */
+  pokemonId: number;
+  /**
+   * Nickname given to the Pokemon, if any.
+   */
+  nickname?: string;
+  /**
+   * Level of the captured Pokemon.
+   */
+  level: number;
+  /**
+   * When the Pokemon was captured.
+   */
+  capturedAt: string;
+};
+
+/**
+ * Payload for catching a new Pokemon.
+ */
+export type CatchPokemonRequest = {
+  pokemonId: number;
+  nickname?: string;
+  level: number;
+};
+
+/**
  * Health status of an individual dependency or subsystem.
  */
 export type ComponentHealth = {
@@ -48,6 +83,13 @@ export type CreatePokemonRequest = {
   weightKg: number;
   isObtainable: boolean;
   classification: PokemonClassification;
+};
+
+/**
+ * Payload for creating a new Trainer.
+ */
+export type CreateTrainerRequest = {
+  name: string;
 };
 
 /**
@@ -250,6 +292,28 @@ export type PokemonType =
  * `oneOf` with `discriminator.mapping` in the generated OpenAPI schema.
  */
 export type PokemonVariant = NormalPokemon | LegendaryPokemon | MythicalPokemon;
+
+/**
+ * A Trainer who catches and battles Pokemon.
+ */
+export type Trainer = {
+  /**
+   * The unique identifier of the Trainer.
+   */
+  id: number;
+  /**
+   * The name of the Trainer.
+   */
+  name: string;
+  /**
+   * The list of Pokemon caught by the Trainer.
+   */
+  caughtPokemon: Array<CapturedPokemon>;
+  /**
+   * When this entry was added.
+   */
+  createdAt: string;
+};
 
 /**
  * Payload for fully replacing an existing Pokemon entry.
@@ -578,3 +642,94 @@ export type ReplacePokemonResponses = {
 
 export type ReplacePokemonResponse =
   ReplacePokemonResponses[keyof ReplacePokemonResponses];
+
+export type CreateTrainerData = {
+  body: CreateTrainerRequest;
+  path?: never;
+  query?: never;
+  url: '/trainers';
+};
+
+export type CreateTrainerErrors = {
+  /**
+   * An unexpected error response.
+   */
+  default: ApiError;
+};
+
+export type CreateTrainerError = CreateTrainerErrors[keyof CreateTrainerErrors];
+
+export type CreateTrainerResponses = {
+  /**
+   * The request has succeeded and a new resource has been created as a result.
+   */
+  201: Trainer;
+};
+
+export type CreateTrainerResponse =
+  CreateTrainerResponses[keyof CreateTrainerResponses];
+
+export type GetTrainerByIdData = {
+  body?: never;
+  path: {
+    id: number;
+  };
+  query?: never;
+  url: '/trainers/{id}';
+};
+
+export type GetTrainerByIdErrors = {
+  /**
+   * The server cannot find the requested resource.
+   */
+  404: unknown;
+  /**
+   * An unexpected error response.
+   */
+  default: ApiError;
+};
+
+export type GetTrainerByIdError =
+  GetTrainerByIdErrors[keyof GetTrainerByIdErrors];
+
+export type GetTrainerByIdResponses = {
+  /**
+   * The request has succeeded.
+   */
+  200: Trainer;
+};
+
+export type GetTrainerByIdResponse =
+  GetTrainerByIdResponses[keyof GetTrainerByIdResponses];
+
+export type CatchPokemonData = {
+  body: CatchPokemonRequest;
+  path: {
+    id: number;
+  };
+  query?: never;
+  url: '/trainers/{id}/catch';
+};
+
+export type CatchPokemonErrors = {
+  /**
+   * The server cannot find the requested resource.
+   */
+  404: unknown;
+  /**
+   * An unexpected error response.
+   */
+  default: ApiError;
+};
+
+export type CatchPokemonError = CatchPokemonErrors[keyof CatchPokemonErrors];
+
+export type CatchPokemonResponses = {
+  /**
+   * The request has succeeded and a new resource has been created as a result.
+   */
+  201: CapturedPokemon;
+};
+
+export type CatchPokemonResponse =
+  CatchPokemonResponses[keyof CatchPokemonResponses];

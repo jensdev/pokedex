@@ -10,6 +10,7 @@ info:
 tags:
   - name: Health
   - name: Pokedex
+  - name: Trainer
 paths:
   /health:
     get:
@@ -253,6 +254,97 @@ paths:
                 $ref: '#/components/schemas/ApiError'
       tags:
         - Pokedex
+  /trainers:
+    post:
+      operationId: createTrainer
+      summary: Create Trainer
+      description: Register a new Trainer.
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trainer'
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Trainer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTrainerRequest'
+  /trainers/{id}:
+    get:
+      operationId: getTrainerById
+      summary: Get Trainer by ID
+      description: Get a Trainer by ID.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Trainer'
+        '404':
+          description: The server cannot find the requested resource.
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Trainer
+  /trainers/{id}/catch:
+    post:
+      operationId: catchPokemon
+      summary: Catch Pokemon
+      description: Catch a Pokemon for a specific Trainer.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: int32
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CapturedPokemon'
+        '404':
+          description: The server cannot find the requested resource.
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Trainer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CatchPokemonRequest'
 components:
   parameters:
     ListPokemonParams.classification:
@@ -345,6 +437,60 @@ components:
             type: string
           description: Optional additional context about the error.
       description: Standard error returned for all 4xx/5xx responses.
+    CapturedPokemon:
+      type: object
+      required:
+        - id
+        - pokemonId
+        - level
+        - capturedAt
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 1
+          description: The unique identifier of the capture.
+        pokemonId:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 1025
+          description: National Pokedex number of the captured Pokemon.
+        nickname:
+          type: string
+          maxLength: 100
+          description: Nickname given to the Pokemon, if any.
+        level:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+          description: Level of the captured Pokemon.
+        capturedAt:
+          type: string
+          format: date-time
+          description: When the Pokemon was captured.
+      description: A Pokemon that has been captured by a Trainer.
+    CatchPokemonRequest:
+      type: object
+      required:
+        - pokemonId
+        - level
+      properties:
+        pokemonId:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 1025
+        nickname:
+          type: string
+          maxLength: 100
+        level:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 100
+      description: Payload for catching a new Pokemon.
     ComponentHealth:
       type: object
       required:
@@ -393,6 +539,16 @@ components:
         classification:
           $ref: '#/components/schemas/PokemonClassification'
       description: Payload for creating a new Pokemon entry.
+    CreateTrainerRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+      description: Payload for creating a new Trainer.
     HealthResponse:
       type: object
       required:
@@ -662,6 +818,34 @@ components:
         Discriminated union of all concrete Pokemon classifications.
         Used as the return type for Pokedex operations — results in a
         `oneOf` with `discriminator.mapping` in the generated OpenAPI schema.
+    Trainer:
+      type: object
+      required:
+        - id
+        - name
+        - caughtPokemon
+        - createdAt
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 1
+          description: The unique identifier of the Trainer.
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: The name of the Trainer.
+        caughtPokemon:
+          type: array
+          items:
+            $ref: '#/components/schemas/CapturedPokemon'
+          description: The list of Pokemon caught by the Trainer.
+        createdAt:
+          type: string
+          format: date-time
+          description: When this entry was added.
+      description: A Trainer who catches and battles Pokemon.
     UpdatePokemonRequest:
       type: object
       required:

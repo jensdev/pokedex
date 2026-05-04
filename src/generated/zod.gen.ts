@@ -12,6 +12,35 @@ export const zApiError = z.object({
 });
 
 /**
+ * A Pokemon that has been captured by a Trainer.
+ */
+export const zCapturedPokemon = z.object({
+  id: z.int().gte(1).max(2147483647, {
+    error: 'Invalid value: Expected int32 to be <= 2147483647',
+  }),
+  pokemonId: z.int().gte(1).lte(1025),
+  nickname: z.string().max(100).optional(),
+  level: z.int().gte(1).lte(100),
+  capturedAt: z.iso.datetime(),
+});
+
+/**
+ * Payload for catching a new Pokemon.
+ */
+export const zCatchPokemonRequest = z.object({
+  pokemonId: z.int().gte(1).lte(1025),
+  nickname: z.string().max(100).optional(),
+  level: z.int().gte(1).lte(100),
+});
+
+/**
+ * Payload for creating a new Trainer.
+ */
+export const zCreateTrainerRequest = z.object({
+  name: z.string().min(1).max(100),
+});
+
+/**
  * Possible states a health check component can be in.
  */
 export const zHealthStatus = z.enum(['healthy', 'degraded', 'unhealthy']);
@@ -252,6 +281,18 @@ export const zPokemonVariant = z.union([
 ]);
 
 /**
+ * A Trainer who catches and battles Pokemon.
+ */
+export const zTrainer = z.object({
+  id: z.int().gte(1).max(2147483647, {
+    error: 'Invalid value: Expected int32 to be <= 2147483647',
+  }),
+  name: z.string().min(1).max(100),
+  caughtPokemon: z.array(zCapturedPokemon),
+  createdAt: z.iso.datetime(),
+});
+
+/**
  * Payload for fully replacing an existing Pokemon entry.
  */
 export const zUpdatePokemonRequest = z.object({
@@ -418,3 +459,44 @@ export const zReplacePokemonPath = z.object({
  * The request has succeeded.
  */
 export const zReplacePokemonResponse = zPokemonVariant;
+
+export const zCreateTrainerBody = zCreateTrainerRequest;
+
+/**
+ * The request has succeeded and a new resource has been created as a result.
+ */
+export const zCreateTrainerResponse = zTrainer;
+
+export const zGetTrainerByIdPath = z.object({
+  id: z
+    .int()
+    .min(-2147483648, {
+      error: 'Invalid value: Expected int32 to be >= -2147483648',
+    })
+    .max(2147483647, {
+      error: 'Invalid value: Expected int32 to be <= 2147483647',
+    }),
+});
+
+/**
+ * The request has succeeded.
+ */
+export const zGetTrainerByIdResponse = zTrainer;
+
+export const zCatchPokemonBody = zCatchPokemonRequest;
+
+export const zCatchPokemonPath = z.object({
+  id: z
+    .int()
+    .min(-2147483648, {
+      error: 'Invalid value: Expected int32 to be >= -2147483648',
+    })
+    .max(2147483647, {
+      error: 'Invalid value: Expected int32 to be <= 2147483647',
+    }),
+});
+
+/**
+ * The request has succeeded and a new resource has been created as a result.
+ */
+export const zCatchPokemonResponse = zCapturedPokemon;

@@ -4,8 +4,10 @@ import "@typespec/openapi3";
 
 import "./models/common.tsp";
 import "./models/pokemon.tsp";
+import "./models/trainer.tsp";
 import "./health.tsp";
 import "./pokedex.tsp";
+import "./trainer.tsp";
 
 using TypeSpec.Http;
 using TypeSpec.OpenAPI;
