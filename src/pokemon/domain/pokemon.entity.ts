@@ -5,7 +5,6 @@ import type {
   PokemonClassification,
 } from '../../generated/types.gen.js';
 import { Stats, Height, Weight, PokemonId } from './value-objects.js';
-import { PokemonCreatedEvent } from './pokemon.events.js';
 
 export interface CreatePokemonProps {
   id: PokemonId;
