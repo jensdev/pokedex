@@ -12,7 +12,7 @@ import { ZodPipe } from '../../../zod.pipe.js';
 import { ListPokemonsQuery } from '../../application/queries/list-pokemons.query.js';
 
 @Controller('pokemon')
-export class ListPokemonsRequest implements Pick<
+export class ListPokemonsController implements Pick<
   PokedexControllerMethods,
   'listPokemon'
 > {

@@ -2,15 +2,15 @@ import { Module } from '@nestjs/common';
 import { HealthCheckQuery } from './application/queries/health-check.query.js';
 import { HealthLivenessQuery } from './application/queries/health-liveness.query.js';
 import { HealthReadinessQuery } from './application/queries/health-readiness.query.js';
-import { HealthCheckRequest } from './presentation/requests/health-check.request.js';
-import { HealthLivenessRequest } from './presentation/requests/health-liveness.request.js';
-import { HealthReadinessRequest } from './presentation/requests/health-readiness.request.js';
+import { HealthCheckController } from './presentation/controllers/health-check.controller.js';
+import { HealthLivenessController } from './presentation/controllers/health-liveness.controller.js';
+import { HealthReadinessController } from './presentation/controllers/health-readiness.controller.js';
 
 @Module({
   controllers: [
-    HealthCheckRequest,
-    HealthLivenessRequest,
-    HealthReadinessRequest,
+    HealthCheckController,
+    HealthLivenessController,
+    HealthReadinessController,
   ],
   providers: [HealthCheckQuery, HealthLivenessQuery, HealthReadinessQuery],
 })

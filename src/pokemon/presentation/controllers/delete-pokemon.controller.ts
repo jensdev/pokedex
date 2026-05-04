@@ -13,7 +13,7 @@ import { ZodPipe } from '../../../zod.pipe.js';
 import { DeletePokemonCommand } from '../../application/commands/delete-pokemon.command.js';
 
 @Controller('pokemon')
-export class DeletePokemonRequest implements Pick<
+export class DeletePokemonController implements Pick<
   PokedexControllerMethods,
   'deletePokemon'
 > {

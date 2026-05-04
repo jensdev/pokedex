@@ -3,7 +3,7 @@ import type { HealthControllerMethods } from '../../../generated/nestjs.gen.js';
 import { HealthCheckQuery } from '../../application/queries/health-check.query.js';
 
 @Controller('health')
-export class HealthCheckRequest implements Pick<
+export class HealthCheckController implements Pick<
   HealthControllerMethods,
   'healthCheck'
 > {

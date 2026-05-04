@@ -4,21 +4,21 @@ import { DeletePokemonCommand } from './application/commands/delete-pokemon.comm
 import { ReplacePokemonCommand } from './application/commands/replace-pokemon.command.js';
 import { PokemonRepository } from './infrastructure/persistence/pokemon.repository.js';
 import { POKEMON_REPOSITORY_TOKEN } from './domain/pokemon.repository.interface.js';
-import { CreatePokemonRequest } from './presentation/requests/create-pokemon.request.js';
-import { DeletePokemonRequest } from './presentation/requests/delete-pokemon.request.js';
-import { GetPokemonByIdRequest } from './presentation/requests/get-pokemon-by-id.request.js';
-import { ListPokemonsRequest } from './presentation/requests/list-pokemons.request.js';
-import { ReplacePokemonRequest } from './presentation/requests/replace-pokemon.request.js';
+import { CreatePokemonController } from './presentation/controllers/create-pokemon.controller.js';
+import { DeletePokemonController } from './presentation/controllers/delete-pokemon.controller.js';
+import { GetPokemonByIdController } from './presentation/controllers/get-pokemon-by-id.controller.js';
+import { ListPokemonsController } from './presentation/controllers/list-pokemons.controller.js';
+import { ReplacePokemonController } from './presentation/controllers/replace-pokemon.controller.js';
 import { GetPokemonByIdQuery } from './application/queries/get-pokemon-by-id.query.js';
 import { ListPokemonsQuery } from './application/queries/list-pokemons.query.js';
 
 @Module({
   controllers: [
-    ListPokemonsRequest,
-    GetPokemonByIdRequest,
-    CreatePokemonRequest,
-    ReplacePokemonRequest,
-    DeletePokemonRequest,
+    ListPokemonsController,
+    GetPokemonByIdController,
+    CreatePokemonController,
+    ReplacePokemonController,
+    DeletePokemonController,
   ],
   providers: [
     {

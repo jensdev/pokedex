@@ -16,7 +16,7 @@ import { ZodPipe } from '../../../zod.pipe.js';
 import { ReplacePokemonCommand } from '../../application/commands/replace-pokemon.command.js';
 
 @Controller('pokemon')
-export class ReplacePokemonRequest implements Pick<
+export class ReplacePokemonController implements Pick<
   PokedexControllerMethods,
   'replacePokemon'
 > {

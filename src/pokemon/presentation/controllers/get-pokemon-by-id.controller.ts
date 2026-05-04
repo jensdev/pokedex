@@ -7,7 +7,7 @@ import { ZodPipe } from '../../../zod.pipe.js';
 import { GetPokemonByIdQuery } from '../../application/queries/get-pokemon-by-id.query.js';
 
 @Controller('pokemon')
-export class GetPokemonByIdRequest implements Pick<
+export class GetPokemonByIdController implements Pick<
   PokedexControllerMethods,
   'getPokemonById'
 > {

@@ -1,4 +1,5 @@
 import { Inject, Injectable } from '@nestjs/common';
+import { R, Result } from '@praha/byethrow';
 import type {
   CreatePokemonRequest,
   PokemonVariant,
@@ -15,7 +16,9 @@ export class CreatePokemonCommand {
     private readonly repository: IPokemonRepository,
   ) {}
 
-  async handle(body: CreatePokemonRequest): Promise<PokemonVariant> {
+  handle(
+    body: CreatePokemonRequest,
+  ): Result.ResultAsync<PokemonVariant, never> {
     const stats = Stats.create(body.baseStats);
     const height = Height.create(body.heightMetres);
     const weight = Weight.create(body.weightKg);
@@ -34,6 +37,6 @@ export class CreatePokemonCommand {
 
     this.repository.save(pokemonEntity);
 
-    return Promise.resolve(pokemonEntity.toDto());
+    return Promise.resolve(R.succeed(pokemonEntity.toDto()));
   }
 }
