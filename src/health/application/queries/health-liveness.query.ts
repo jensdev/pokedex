@@ -1,5 +1,5 @@
 import { Injectable } from '@nestjs/common';
-import type { HealthLivenessResponse } from '../../generated/types.gen.js';
+import type { HealthLivenessResponse } from '../../../generated/types.gen.js';
 
 @Injectable()
 export class HealthLivenessQuery {
