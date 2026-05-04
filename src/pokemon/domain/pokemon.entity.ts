@@ -57,6 +57,11 @@ export class Pokemon {
     return new Pokemon(state);
   }
 
+  // Rehydrate from persistence
+  static load(state: PokemonVariant): Pokemon {
+    return new Pokemon(state);
+  }
+
   // To map it back to the DTO for the repository/API response
   toDto(): PokemonVariant {
     return this.state;

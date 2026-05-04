@@ -9,10 +9,10 @@ export class GetPokemonByIdQuery {
   constructor(private readonly repository: PokemonRepository) {}
 
   get(id: number): Result.ResultAsync<PokemonVariant, PokemonNotFoundError> {
-    const pokemon = this.repository.findById(id);
+    const pokemonEntity = this.repository.findById(id);
 
     return Promise.resolve(
-      pokemon ? R.succeed(pokemon) : R.fail(new PokemonNotFoundError()),
+      pokemonEntity ? R.succeed(pokemonEntity.toDto()) : R.fail(new PokemonNotFoundError()),
     );
   }
 }

@@ -1,3 +1,4 @@
+import { Pokemon } from '../domain/pokemon.entity.js';
 import { Injectable } from '@nestjs/common';
 import { R, Result } from '@praha/byethrow';
 import { match } from 'ts-pattern';
@@ -22,10 +23,12 @@ export class ReplacePokemonCommand {
       return Promise.resolve(R.fail(new PokemonNotFoundError()));
     }
 
-    const existing = this.repository.findById(id);
-    if (!existing) {
+    const existingEntity = this.repository.findById(id);
+    if (!existingEntity) {
       return Promise.resolve(R.fail(new PokemonNotFoundError()));
     }
+
+    const existing = existingEntity.toDto();
 
     const now = new Date().toISOString();
     const base = {
@@ -77,7 +80,9 @@ export class ReplacePokemonCommand {
       }))
       .exhaustive();
 
-    this.repository.replace(index, pokemon);
-    return Promise.resolve(R.succeed(pokemon));
+    const updatedEntity = Pokemon.load(pokemon);
+
+    this.repository.replace(index, updatedEntity);
+    return Promise.resolve(R.succeed(updatedEntity.toDto()));
   }
 }

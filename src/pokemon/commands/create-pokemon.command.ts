@@ -28,9 +28,8 @@ export class CreatePokemonCommand {
       classification: body.classification,
     });
 
-    const pokemonDto = pokemonEntity.toDto();
-    this.repository.create(pokemonDto);
+    this.repository.create(pokemonEntity);
 
-    return Promise.resolve(pokemonDto);
+    return Promise.resolve(pokemonEntity.toDto());
   }
 }

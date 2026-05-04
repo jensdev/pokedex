@@ -3,6 +3,7 @@ import * as z from 'zod';
 import { zPokemonVariant } from '../generated/zod.gen.js';
 import type { PokemonVariant } from '../generated/types.gen.js';
 import { rawPokemon } from './pokemon.constants.js';
+import { Pokemon } from './domain/pokemon.entity.js';
 
 @Injectable()
 export class PokemonRepository {
@@ -20,8 +21,10 @@ export class PokemonRepository {
     return Promise.resolve(this.pokemon);
   }
 
-  findById(id: number): PokemonVariant | undefined {
-    return this.pokemon.find((item) => item.id === id);
+  findById(id: number): Pokemon | undefined {
+    const item = this.pokemon.find((item) => item.id === id);
+    if (!item) return undefined;
+    return Pokemon.load(item);
   }
 
   findIndexById(id: number): number {
@@ -34,12 +37,12 @@ export class PokemonRepository {
     return id;
   }
 
-  create(item: PokemonVariant): void {
-    this.pokemon.push(item);
+  create(item: Pokemon): void {
+    this.pokemon.push(item.toDto());
   }
 
-  replace(index: number, item: PokemonVariant): void {
-    this.pokemon[index] = item;
+  replace(index: number, item: Pokemon): void {
+    this.pokemon[index] = item.toDto();
   }
 
   remove(index: number): void {
