@@ -6,7 +6,9 @@ import { rawPokemon } from './pokemon.constants.js';
 
 @Injectable()
 export class PokemonRepository {
-  private pokemon: PokemonVariant[] = z.array(zPokemonVariant).parse(rawPokemon);
+  private pokemon: PokemonVariant[] = z
+    .array(zPokemonVariant)
+    .parse(rawPokemon);
 
   private nextIdValue = 1026;
 

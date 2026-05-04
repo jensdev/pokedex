@@ -1,9 +1,11 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-unsafe-call, @typescript-eslint/no-unsafe-return */
 import { Injectable } from '@nestjs/common';
 import { R, Result } from '@praha/byethrow';
 import * as z from 'zod';
 import { zPokemonVariant } from '../../generated/zod.gen.js';
-import type { ListPokemonData, ListPokemonResponse } from '../../generated/types.gen.js';
+import type {
+  ListPokemonData,
+  ListPokemonResponse,
+} from '../../generated/types.gen.js';
 import { PokemonDataParseError } from '../pokemon.errors.js';
 import { PokemonRepository } from '../pokemon.repository.js';
 
@@ -52,7 +54,9 @@ export class ListPokemonsQuery {
         }
 
         const searchLower = search.toLowerCase();
-        return items.filter(({ name }) => name.toLowerCase().includes(searchLower));
+        return items.filter(({ name }) =>
+          name.toLowerCase().includes(searchLower),
+        );
       }),
       R.map((items) => {
         if (!sortBy) {

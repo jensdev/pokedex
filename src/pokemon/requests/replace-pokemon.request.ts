@@ -8,14 +8,18 @@ import {
 import { match } from 'ts-pattern';
 import type { PokedexControllerMethods } from '../../generated/nestjs.gen.js';
 import type { ReplacePokemonData } from '../../generated/types.gen.js';
-import { zReplacePokemonBody, zReplacePokemonPath } from '../../generated/zod.gen.js';
+import {
+  zReplacePokemonBody,
+  zReplacePokemonPath,
+} from '../../generated/zod.gen.js';
 import { ZodPipe } from '../../zod.pipe.js';
 import { ReplacePokemonCommand } from '../commands/replace-pokemon.command.js';
 
 @Controller('pokemon')
-export class ReplacePokemonRequest
-  implements Pick<PokedexControllerMethods, 'replacePokemon'>
-{
+export class ReplacePokemonRequest implements Pick<
+  PokedexControllerMethods,
+  'replacePokemon'
+> {
   constructor(private readonly command: ReplacePokemonCommand) {}
 
   @Put(':id')

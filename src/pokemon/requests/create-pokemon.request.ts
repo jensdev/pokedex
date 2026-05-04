@@ -3,14 +3,13 @@ import type { PokedexControllerMethods } from '../../generated/nestjs.gen.js';
 import type { CreatePokemonData } from '../../generated/types.gen.js';
 import { zCreatePokemonBody } from '../../generated/zod.gen.js';
 import { ZodPipe } from '../../zod.pipe.js';
-import {
-  CreatePokemonCommand,
-} from '../commands/create-pokemon.command.js';
+import { CreatePokemonCommand } from '../commands/create-pokemon.command.js';
 
 @Controller('pokemon')
-export class CreatePokemonRequest
-  implements Pick<PokedexControllerMethods, 'createPokemon'>
-{
+export class CreatePokemonRequest implements Pick<
+  PokedexControllerMethods,
+  'createPokemon'
+> {
   constructor(private readonly command: CreatePokemonCommand) {}
 
   @Post()
