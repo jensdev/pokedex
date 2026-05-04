@@ -4,10 +4,11 @@ import type {
   PokemonType,
   PokemonClassification,
 } from '../../generated/types.gen.js';
-import { Stats, Height, Weight } from './value-objects.js';
+import { Stats, Height, Weight, PokemonId } from './value-objects.js';
+import { PokemonCreatedEvent } from './pokemon.events.js';
 
 export interface CreatePokemonProps {
-  id: number;
+  id: PokemonId;
   name: string;
   primaryType: PokemonType;
   secondaryType?: PokemonType;
@@ -25,7 +26,7 @@ export class Pokemon {
     const now = new Date().toISOString();
 
     const base = {
-      id: props.id,
+      id: props.id.value,
       name: props.name,
       primaryType: props.primaryType,
       secondaryType: props.secondaryType,
@@ -58,12 +59,17 @@ export class Pokemon {
       }))
       .exhaustive();
 
-    return new Pokemon(state);
+    const pokemon = new Pokemon(state);
+    return pokemon;
   }
 
   // Rehydrate from persistence
   static load(state: PokemonVariant): Pokemon {
     return new Pokemon(state);
+  }
+
+  get id(): PokemonId {
+    return PokemonId.create(this.state.id);
   }
 
   // To map it back to the DTO for the repository/API response

@@ -4,6 +4,7 @@ import type { PokemonVariant } from '../../../generated/types.gen.js';
 import { PokemonNotFoundError } from '../../domain/pokemon.errors.js';
 import type { IPokemonRepository } from '../../domain/pokemon.repository.interface.js';
 import { POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
+import { PokemonId } from '../../domain/value-objects.js';
 
 @Injectable()
 export class GetPokemonByIdQuery {
@@ -12,7 +13,10 @@ export class GetPokemonByIdQuery {
     private readonly repository: IPokemonRepository,
   ) {}
 
-  get(id: number): Result.ResultAsync<PokemonVariant, PokemonNotFoundError> {
+  get(
+    idValue: number,
+  ): Result.ResultAsync<PokemonVariant, PokemonNotFoundError> {
+    const id = PokemonId.create(idValue);
     const pokemonEntity = this.repository.findById(id);
 
     return Promise.resolve(

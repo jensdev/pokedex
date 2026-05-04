@@ -3,6 +3,7 @@ import { R, Result } from '@praha/byethrow';
 import { PokemonNotFoundError } from '../../domain/pokemon.errors.js';
 import type { IPokemonRepository } from '../../domain/pokemon.repository.interface.js';
 import { POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
+import { PokemonId } from '../../domain/value-objects.js';
 
 @Injectable()
 export class DeletePokemonCommand {
@@ -11,14 +12,15 @@ export class DeletePokemonCommand {
     private readonly repository: IPokemonRepository,
   ) {}
 
-  handle(id: number): Result.ResultAsync<void, PokemonNotFoundError> {
-    const index = this.repository.findIndexById(id);
+  handle(idValue: number): Result.ResultAsync<void, PokemonNotFoundError> {
+    const id = PokemonId.create(idValue);
+    const existingEntity = this.repository.findById(id);
 
-    if (index === -1) {
+    if (!existingEntity) {
       return Promise.resolve(R.fail(new PokemonNotFoundError()));
     }
 
-    this.repository.remove(index);
+    this.repository.remove(id);
     return Promise.resolve(R.succeed(undefined));
   }
 }

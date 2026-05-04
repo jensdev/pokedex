@@ -57,3 +57,20 @@ export class Weight {
     return new Weight(kg);
   }
 }
+
+export class PokemonId {
+  private constructor(public readonly value: number) {}
+
+  static create(id: number): PokemonId {
+    if (id <= 0) {
+      throw new InvalidMeasurementException(
+        'Pokemon ID must be greater than zero.',
+      );
+    }
+    return new PokemonId(id);
+  }
+
+  equals(other: PokemonId): boolean {
+    return this.value === other.value;
+  }
+}

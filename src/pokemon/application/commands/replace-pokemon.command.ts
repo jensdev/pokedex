@@ -9,6 +9,7 @@ import type {
 import { PokemonNotFoundError } from '../../domain/pokemon.errors.js';
 import type { IPokemonRepository } from '../../domain/pokemon.repository.interface.js';
 import { POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
+import { PokemonId } from '../../domain/value-objects.js';
 
 @Injectable()
 export class ReplacePokemonCommand {
@@ -18,16 +19,12 @@ export class ReplacePokemonCommand {
   ) {}
 
   handle(
-    id: number,
+    idValue: number,
     body: UpdatePokemonRequest,
   ): Result.ResultAsync<PokemonVariant, PokemonNotFoundError> {
-    const index = this.repository.findIndexById(id);
-
-    if (index === -1) {
-      return Promise.resolve(R.fail(new PokemonNotFoundError()));
-    }
-
+    const id = PokemonId.create(idValue);
     const existingEntity = this.repository.findById(id);
+
     if (!existingEntity) {
       return Promise.resolve(R.fail(new PokemonNotFoundError()));
     }
@@ -86,7 +83,7 @@ export class ReplacePokemonCommand {
 
     const updatedEntity = Pokemon.load(pokemon);
 
-    this.repository.replace(index, updatedEntity);
+    this.repository.save(updatedEntity);
     return Promise.resolve(R.succeed(updatedEntity.toDto()));
   }
 }

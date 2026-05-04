@@ -5,6 +5,7 @@ import type { PokemonVariant } from '../../../generated/types.gen.js';
 import { rawPokemon } from '../pokemon.constants.js';
 import { Pokemon } from '../../domain/pokemon.entity.js';
 import { IPokemonRepository } from '../../domain/pokemon.repository.interface.js';
+import { PokemonId } from '../../domain/value-objects.js';
 
 @Injectable()
 export class PokemonRepository implements IPokemonRepository {
@@ -22,31 +23,32 @@ export class PokemonRepository implements IPokemonRepository {
     return Promise.resolve(this.pokemon);
   }
 
-  findById(id: number): Pokemon | undefined {
-    const item = this.pokemon.find((item) => item.id === id);
+  findById(id: PokemonId): Pokemon | undefined {
+    const item = this.pokemon.find((item) => item.id === id.value);
     if (!item) return undefined;
     return Pokemon.load(item);
   }
 
-  findIndexById(id: number): number {
-    return this.pokemon.findIndex((item) => item.id === id);
-  }
-
-  nextId(): number {
+  nextId(): PokemonId {
     const id = this.nextIdValue;
     this.nextIdValue += 1;
-    return id;
+    return PokemonId.create(id);
   }
 
-  create(item: Pokemon): void {
-    this.pokemon.push(item.toDto());
+  save(item: Pokemon): void {
+    const dto = item.toDto();
+    const index = this.pokemon.findIndex((p) => p.id === dto.id);
+    if (index === -1) {
+      this.pokemon.push(dto);
+    } else {
+      this.pokemon[index] = dto;
+    }
   }
 
-  replace(index: number, item: Pokemon): void {
-    this.pokemon[index] = item.toDto();
-  }
-
-  remove(index: number): void {
-    this.pokemon.splice(index, 1);
+  remove(id: PokemonId): void {
+    const index = this.pokemon.findIndex((p) => p.id === id.value);
+    if (index !== -1) {
+      this.pokemon.splice(index, 1);
+    }
   }
 }

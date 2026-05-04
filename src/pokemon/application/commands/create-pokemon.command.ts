@@ -32,7 +32,7 @@ export class CreatePokemonCommand {
       classification: body.classification,
     });
 
-    this.repository.create(pokemonEntity);
+    this.repository.save(pokemonEntity);
 
     return Promise.resolve(pokemonEntity.toDto());
   }
