@@ -93,6 +93,11 @@ npm run start:dev
 
 The API will be available at **http://localhost:3000**.
 
+## Agent instructions
+
+This repository is optimized for AI agents (Gemini, Claude, etc.).
+See [AGENTS.md](./AGENTS.md) and [GEMINI.md](./GEMINI.md) for architectural conventions, rules, and best practices for contributing to this codebase.
+
 ## Notable libraries
 
 | Library                                                       | Purpose                                                           |
