@@ -6,6 +6,7 @@ import "./models/common.tsp";
 import "./models/pokemon.tsp";
 import "./health.tsp";
 import "./pokedex.tsp";
+import "./battle.tsp";
 
 using TypeSpec.Http;
 using TypeSpec.OpenAPI;

@@ -10,7 +10,97 @@ info:
 tags:
   - name: Health
   - name: Pokedex
+  - name: Battle
 paths:
+  /battles:
+    post:
+      operationId: startBattle
+      summary: Start Battle
+      description: Start a new battle between two trainers.
+      parameters: []
+      responses:
+        '201':
+          description: The request has succeeded and a new resource has been created as a result.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BattleStatus'
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Battle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/StartBattleRequest'
+  /battles/{id}:
+    get:
+      operationId: getBattleById
+      summary: Get Battle Status
+      description: Get the current status and history of a battle.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BattleStatus'
+        '404':
+          description: The server cannot find the requested resource.
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Battle
+  /battles/{id}/move:
+    post:
+      operationId: performMove
+      summary: Perform Move
+      description: Perform a move in an ongoing battle.
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BattleStatus'
+        '404':
+          description: The server cannot find the requested resource.
+        default:
+          description: An unexpected error response.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiError'
+      tags:
+        - Battle
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PerformMoveRequest'
   /health:
     get:
       operationId: healthCheck
@@ -345,6 +435,120 @@ components:
             type: string
           description: Optional additional context about the error.
       description: Standard error returned for all 4xx/5xx responses.
+    BattleEvent:
+      type: object
+      required:
+        - type
+        - timestamp
+      properties:
+        type:
+          type: string
+        timestamp:
+          type: string
+      discriminator:
+        propertyName: type
+        mapping:
+          BattleStarted: '#/components/schemas/BattleStartedEvent'
+          MovePerformed: '#/components/schemas/MovePerformedEvent'
+          BattleFinished: '#/components/schemas/BattleFinishedEvent'
+    BattleFinishedEvent:
+      type: object
+      required:
+        - type
+        - winnerId
+      properties:
+        type:
+          type: string
+          enum:
+            - BattleFinished
+        winnerId:
+          type: string
+      allOf:
+        - $ref: '#/components/schemas/BattleEvent'
+    BattleParticipant:
+      type: object
+      required:
+        - trainerId
+        - pokemon
+      properties:
+        trainerId:
+          type: string
+        pokemon:
+          $ref: '#/components/schemas/BattlePokemon'
+    BattlePokemon:
+      type: object
+      required:
+        - trainerId
+        - pokemonId
+        - name
+        - maxHp
+        - currentHp
+      properties:
+        trainerId:
+          type: string
+        pokemonId:
+          type: integer
+          format: int32
+        name:
+          type: string
+        maxHp:
+          type: integer
+          format: int32
+        currentHp:
+          type: integer
+          format: int32
+    BattleStartedEvent:
+      type: object
+      required:
+        - type
+        - battleId
+        - trainer1
+        - trainer2
+      properties:
+        type:
+          type: string
+          enum:
+            - BattleStarted
+        battleId:
+          type: string
+        trainer1:
+          $ref: '#/components/schemas/BattleParticipant'
+        trainer2:
+          $ref: '#/components/schemas/BattleParticipant'
+      allOf:
+        - $ref: '#/components/schemas/BattleEvent'
+    BattleStatus:
+      type: object
+      required:
+        - id
+        - status
+        - turn
+        - activeTrainerId
+        - pokemon
+        - history
+      properties:
+        id:
+          type: string
+        status:
+          type: string
+          enum:
+            - ongoing
+            - finished
+        winnerId:
+          type: string
+        turn:
+          type: integer
+          format: int32
+        activeTrainerId:
+          type: string
+        pokemon:
+          type: array
+          items:
+            $ref: '#/components/schemas/BattlePokemon'
+        history:
+          type: array
+          items:
+            $ref: '#/components/schemas/BattleEvent'
     ComponentHealth:
       type: object
       required:
@@ -474,6 +678,33 @@ components:
           format: double
           description: Process uptime in seconds.
       description: Liveness probe response — confirms the process is running.
+    MovePerformedEvent:
+      type: object
+      required:
+        - type
+        - trainerId
+        - moveName
+        - damageDealt
+        - targetId
+        - isCritical
+      properties:
+        type:
+          type: string
+          enum:
+            - MovePerformed
+        trainerId:
+          type: string
+        moveName:
+          type: string
+        damageDealt:
+          type: integer
+          format: int32
+        targetId:
+          type: string
+        isCritical:
+          type: boolean
+      allOf:
+        - $ref: '#/components/schemas/BattleEvent'
     MythicalPokemon:
       type: object
       required:
@@ -525,6 +756,16 @@ components:
       allOf:
         - $ref: '#/components/schemas/Pokemon'
       description: A regular, catchable Pokemon with no special legendary status.
+    PerformMoveRequest:
+      type: object
+      required:
+        - trainerId
+        - moveName
+      properties:
+        trainerId:
+          type: string
+        moveName:
+          type: string
     Pokemon:
       type: object
       required:
@@ -662,6 +903,24 @@ components:
         Discriminated union of all concrete Pokemon classifications.
         Used as the return type for Pokedex operations — results in a
         `oneOf` with `discriminator.mapping` in the generated OpenAPI schema.
+    StartBattleRequest:
+      type: object
+      required:
+        - trainer1Id
+        - trainer1PokemonId
+        - trainer2Id
+        - trainer2PokemonId
+      properties:
+        trainer1Id:
+          type: string
+        trainer1PokemonId:
+          type: integer
+          format: int32
+        trainer2Id:
+          type: string
+        trainer2PokemonId:
+          type: integer
+          format: int32
     UpdatePokemonRequest:
       type: object
       required:

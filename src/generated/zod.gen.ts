@@ -11,6 +11,90 @@ export const zApiError = z.object({
   details: z.record(z.string(), z.string()).optional(),
 });
 
+export const zBattleEvent = z.object({
+  type: z.string(),
+  timestamp: z.string(),
+});
+
+export const zBattleFinishedEvent = zBattleEvent
+  .and(
+    z.object({
+      type: z.literal('BattleFinished'),
+    }),
+  )
+  .and(
+    z.object({
+      type: z.enum(['BattleFinished']),
+      winnerId: z.string(),
+    }),
+  );
+
+export const zBattlePokemon = z.object({
+  trainerId: z.string(),
+  pokemonId: z
+    .int()
+    .min(-2147483648, {
+      error: 'Invalid value: Expected int32 to be >= -2147483648',
+    })
+    .max(2147483647, {
+      error: 'Invalid value: Expected int32 to be <= 2147483647',
+    }),
+  name: z.string(),
+  maxHp: z
+    .int()
+    .min(-2147483648, {
+      error: 'Invalid value: Expected int32 to be >= -2147483648',
+    })
+    .max(2147483647, {
+      error: 'Invalid value: Expected int32 to be <= 2147483647',
+    }),
+  currentHp: z
+    .int()
+    .min(-2147483648, {
+      error: 'Invalid value: Expected int32 to be >= -2147483648',
+    })
+    .max(2147483647, {
+      error: 'Invalid value: Expected int32 to be <= 2147483647',
+    }),
+});
+
+export const zBattleParticipant = z.object({
+  trainerId: z.string(),
+  pokemon: zBattlePokemon,
+});
+
+export const zBattleStartedEvent = zBattleEvent
+  .and(
+    z.object({
+      type: z.literal('BattleStarted'),
+    }),
+  )
+  .and(
+    z.object({
+      type: z.enum(['BattleStarted']),
+      battleId: z.string(),
+      trainer1: zBattleParticipant,
+      trainer2: zBattleParticipant,
+    }),
+  );
+
+export const zBattleStatus = z.object({
+  id: z.string(),
+  status: z.enum(['ongoing', 'finished']),
+  winnerId: z.string().optional(),
+  turn: z
+    .int()
+    .min(-2147483648, {
+      error: 'Invalid value: Expected int32 to be >= -2147483648',
+    })
+    .max(2147483647, {
+      error: 'Invalid value: Expected int32 to be <= 2147483647',
+    }),
+  activeTrainerId: z.string(),
+  pokemon: z.array(zBattlePokemon),
+  history: z.array(zBattleEvent),
+});
+
 /**
  * Possible states a health check component can be in.
  */
@@ -53,6 +137,35 @@ export const zHealthResponse = z.object({
 export const zLivenessResponse = z.object({
   status: z.enum(['ok']),
   uptime: z.number(),
+});
+
+export const zMovePerformedEvent = zBattleEvent
+  .and(
+    z.object({
+      type: z.literal('MovePerformed'),
+    }),
+  )
+  .and(
+    z.object({
+      type: z.enum(['MovePerformed']),
+      trainerId: z.string(),
+      moveName: z.string(),
+      damageDealt: z
+        .int()
+        .min(-2147483648, {
+          error: 'Invalid value: Expected int32 to be >= -2147483648',
+        })
+        .max(2147483647, {
+          error: 'Invalid value: Expected int32 to be <= 2147483647',
+        }),
+      targetId: z.string(),
+      isCritical: z.boolean(),
+    }),
+  );
+
+export const zPerformMoveRequest = z.object({
+  trainerId: z.string(),
+  moveName: z.string(),
 });
 
 /**
@@ -251,6 +364,27 @@ export const zPokemonVariant = z.union([
   zMythicalPokemon,
 ]);
 
+export const zStartBattleRequest = z.object({
+  trainer1Id: z.string(),
+  trainer1PokemonId: z
+    .int()
+    .min(-2147483648, {
+      error: 'Invalid value: Expected int32 to be >= -2147483648',
+    })
+    .max(2147483647, {
+      error: 'Invalid value: Expected int32 to be <= 2147483647',
+    }),
+  trainer2Id: z.string(),
+  trainer2PokemonId: z
+    .int()
+    .min(-2147483648, {
+      error: 'Invalid value: Expected int32 to be >= -2147483648',
+    })
+    .max(2147483647, {
+      error: 'Invalid value: Expected int32 to be <= 2147483647',
+    }),
+});
+
 /**
  * Payload for fully replacing an existing Pokemon entry.
  */
@@ -305,6 +439,33 @@ export const zPaginationParamsPage = z
  * Number of items per page. Max 100.
  */
 export const zPaginationParamsPageSize = z.int().gte(1).lte(100).default(20);
+
+export const zStartBattleBody = zStartBattleRequest;
+
+/**
+ * The request has succeeded and a new resource has been created as a result.
+ */
+export const zStartBattleResponse = zBattleStatus;
+
+export const zGetBattleByIdPath = z.object({
+  id: z.string(),
+});
+
+/**
+ * The request has succeeded.
+ */
+export const zGetBattleByIdResponse = zBattleStatus;
+
+export const zPerformMoveBody = zPerformMoveRequest;
+
+export const zPerformMovePath = z.object({
+  id: z.string(),
+});
+
+/**
+ * The request has succeeded.
+ */
+export const zPerformMoveResponse = zBattleStatus;
 
 /**
  * The request has succeeded.

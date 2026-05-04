@@ -24,6 +24,50 @@ export type ApiError = {
   };
 };
 
+export type BattleEvent = {
+  type: string;
+  timestamp: string;
+};
+
+export type BattleFinishedEvent = Omit<BattleEvent, 'type'> & {
+  type: 'BattleFinished';
+} & {
+  type: 'BattleFinished';
+  winnerId: string;
+};
+
+export type BattleParticipant = {
+  trainerId: string;
+  pokemon: BattlePokemon;
+};
+
+export type BattlePokemon = {
+  trainerId: string;
+  pokemonId: number;
+  name: string;
+  maxHp: number;
+  currentHp: number;
+};
+
+export type BattleStartedEvent = Omit<BattleEvent, 'type'> & {
+  type: 'BattleStarted';
+} & {
+  type: 'BattleStarted';
+  battleId: string;
+  trainer1: BattleParticipant;
+  trainer2: BattleParticipant;
+};
+
+export type BattleStatus = {
+  id: string;
+  status: 'ongoing' | 'finished';
+  winnerId?: string;
+  turn: number;
+  activeTrainerId: string;
+  pokemon: Array<BattlePokemon>;
+  history: Array<BattleEvent>;
+};
+
 /**
  * Health status of an individual dependency or subsystem.
  */
@@ -114,6 +158,17 @@ export type LivenessResponse = {
   uptime: number;
 };
 
+export type MovePerformedEvent = Omit<BattleEvent, 'type'> & {
+  type: 'MovePerformed';
+} & {
+  type: 'MovePerformed';
+  trainerId: string;
+  moveName: string;
+  damageDealt: number;
+  targetId: string;
+  isCritical: boolean;
+};
+
 /**
  * A Mythical Pokemon — event-only distribution, outside the normal story,
  * typically cannot be caught in the wild.
@@ -151,6 +206,11 @@ export type NormalPokemon = Omit<Pokemon, 'classification'> & {
    * National Pokedex IDs of the Pokemon this one can evolve into, if any.
    */
   evolvesInto?: Array<number>;
+};
+
+export type PerformMoveRequest = {
+  trainerId: string;
+  moveName: string;
 };
 
 /**
@@ -251,6 +311,13 @@ export type PokemonType =
  */
 export type PokemonVariant = NormalPokemon | LegendaryPokemon | MythicalPokemon;
 
+export type StartBattleRequest = {
+  trainer1Id: string;
+  trainer1PokemonId: number;
+  trainer2Id: string;
+  trainer2PokemonId: number;
+};
+
 /**
  * Payload for fully replacing an existing Pokemon entry.
  */
@@ -299,6 +366,96 @@ export type PaginationParamsPage = number;
  * Number of items per page. Max 100.
  */
 export type PaginationParamsPageSize = number;
+
+export type StartBattleData = {
+  body: StartBattleRequest;
+  path?: never;
+  query?: never;
+  url: '/battles';
+};
+
+export type StartBattleErrors = {
+  /**
+   * An unexpected error response.
+   */
+  default: ApiError;
+};
+
+export type StartBattleError = StartBattleErrors[keyof StartBattleErrors];
+
+export type StartBattleResponses = {
+  /**
+   * The request has succeeded and a new resource has been created as a result.
+   */
+  201: BattleStatus;
+};
+
+export type StartBattleResponse =
+  StartBattleResponses[keyof StartBattleResponses];
+
+export type GetBattleByIdData = {
+  body?: never;
+  path: {
+    id: string;
+  };
+  query?: never;
+  url: '/battles/{id}';
+};
+
+export type GetBattleByIdErrors = {
+  /**
+   * The server cannot find the requested resource.
+   */
+  404: unknown;
+  /**
+   * An unexpected error response.
+   */
+  default: ApiError;
+};
+
+export type GetBattleByIdError = GetBattleByIdErrors[keyof GetBattleByIdErrors];
+
+export type GetBattleByIdResponses = {
+  /**
+   * The request has succeeded.
+   */
+  200: BattleStatus;
+};
+
+export type GetBattleByIdResponse =
+  GetBattleByIdResponses[keyof GetBattleByIdResponses];
+
+export type PerformMoveData = {
+  body: PerformMoveRequest;
+  path: {
+    id: string;
+  };
+  query?: never;
+  url: '/battles/{id}/move';
+};
+
+export type PerformMoveErrors = {
+  /**
+   * The server cannot find the requested resource.
+   */
+  404: unknown;
+  /**
+   * An unexpected error response.
+   */
+  default: ApiError;
+};
+
+export type PerformMoveError = PerformMoveErrors[keyof PerformMoveErrors];
+
+export type PerformMoveResponses = {
+  /**
+   * The request has succeeded.
+   */
+  200: BattleStatus;
+};
+
+export type PerformMoveResponse =
+  PerformMoveResponses[keyof PerformMoveResponses];
 
 export type HealthCheckData = {
   body?: never;

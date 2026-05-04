@@ -13,6 +13,9 @@ import type {
   DeletePokemonData,
   DeletePokemonErrors,
   DeletePokemonResponses,
+  GetBattleByIdData,
+  GetBattleByIdErrors,
+  GetBattleByIdResponses,
   GetPokemonByIdData,
   GetPokemonByIdErrors,
   GetPokemonByIdResponses,
@@ -28,9 +31,15 @@ import type {
   ListPokemonData,
   ListPokemonErrors,
   ListPokemonResponses,
+  PerformMoveData,
+  PerformMoveErrors,
+  PerformMoveResponses,
   ReplacePokemonData,
   ReplacePokemonErrors,
   ReplacePokemonResponses,
+  StartBattleData,
+  StartBattleErrors,
+  StartBattleResponses,
 } from './types.gen.js';
 
 export type Options<
@@ -50,6 +59,62 @@ export type Options<
    */
   meta?: Record<string, unknown>;
 };
+
+/**
+ * Start Battle
+ *
+ * Start a new battle between two trainers.
+ */
+export const startBattle = <ThrowOnError extends boolean = false>(
+  options: Options<StartBattleData, ThrowOnError>,
+) =>
+  (options.client ?? client).post<
+    StartBattleResponses,
+    StartBattleErrors,
+    ThrowOnError
+  >({
+    url: '/battles',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
+
+/**
+ * Get Battle Status
+ *
+ * Get the current status and history of a battle.
+ */
+export const getBattleById = <ThrowOnError extends boolean = false>(
+  options: Options<GetBattleByIdData, ThrowOnError>,
+) =>
+  (options.client ?? client).get<
+    GetBattleByIdResponses,
+    GetBattleByIdErrors,
+    ThrowOnError
+  >({ url: '/battles/{id}', ...options });
+
+/**
+ * Perform Move
+ *
+ * Perform a move in an ongoing battle.
+ */
+export const performMove = <ThrowOnError extends boolean = false>(
+  options: Options<PerformMoveData, ThrowOnError>,
+) =>
+  (options.client ?? client).post<
+    PerformMoveResponses,
+    PerformMoveErrors,
+    ThrowOnError
+  >({
+    url: '/battles/{id}/move',
+    ...options,
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+  });
 
 /**
  * Full health check

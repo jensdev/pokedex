@@ -5,6 +5,8 @@ import type {
   CreatePokemonResponse,
   DeletePokemonData,
   DeletePokemonResponse,
+  GetBattleByIdData,
+  GetBattleByIdResponse,
   GetPokemonByIdData,
   GetPokemonByIdResponse,
   HealthCheckResponse,
@@ -12,9 +14,24 @@ import type {
   HealthReadinessResponse,
   ListPokemonData,
   ListPokemonResponse,
+  PerformMoveData,
+  PerformMoveResponse,
   ReplacePokemonData,
   ReplacePokemonResponse,
+  StartBattleData,
+  StartBattleResponse,
 } from './types.gen.js';
+
+export type BattleControllerMethods = {
+  startBattle: (body: StartBattleData['body']) => Promise<StartBattleResponse>;
+  getBattleById: (
+    path: GetBattleByIdData['path'],
+  ) => Promise<GetBattleByIdResponse>;
+  performMove: (
+    path: PerformMoveData['path'],
+    body: PerformMoveData['body'],
+  ) => Promise<PerformMoveResponse>;
+};
 
 export type HealthControllerMethods = {
   healthCheck: () => Promise<HealthCheckResponse>;
