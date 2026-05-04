@@ -6,14 +6,14 @@ import {
   Put,
 } from '@nestjs/common';
 import { match } from 'ts-pattern';
-import type { PokedexControllerMethods } from '../../generated/nestjs.gen.js';
-import type { ReplacePokemonData } from '../../generated/types.gen.js';
+import type { PokedexControllerMethods } from '../../../generated/nestjs.gen.js';
+import type { ReplacePokemonData } from '../../../generated/types.gen.js';
 import {
   zReplacePokemonBody,
   zReplacePokemonPath,
-} from '../../generated/zod.gen.js';
-import { ZodPipe } from '../../zod.pipe.js';
-import { ReplacePokemonCommand } from '../commands/replace-pokemon.command.js';
+} from '../../../generated/zod.gen.js';
+import { ZodPipe } from '../../../zod.pipe.js';
+import { ReplacePokemonCommand } from '../../application/commands/replace-pokemon.command.js';
 
 @Controller('pokemon')
 export class ReplacePokemonRequest implements Pick<

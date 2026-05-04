@@ -1,10 +1,10 @@
 import { Controller, Get, NotFoundException, Param } from '@nestjs/common';
 import { match } from 'ts-pattern';
-import type { PokedexControllerMethods } from '../../generated/nestjs.gen.js';
-import type { GetPokemonByIdData } from '../../generated/types.gen.js';
-import { zGetPokemonByIdPath } from '../../generated/zod.gen.js';
-import { ZodPipe } from '../../zod.pipe.js';
-import { GetPokemonByIdQuery } from '../queries/get-pokemon-by-id.query.js';
+import type { PokedexControllerMethods } from '../../../generated/nestjs.gen.js';
+import type { GetPokemonByIdData } from '../../../generated/types.gen.js';
+import { zGetPokemonByIdPath } from '../../../generated/zod.gen.js';
+import { ZodPipe } from '../../../zod.pipe.js';
+import { GetPokemonByIdQuery } from '../../application/queries/get-pokemon-by-id.query.js';
 
 @Controller('pokemon')
 export class GetPokemonByIdRequest implements Pick<

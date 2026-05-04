@@ -1,17 +1,21 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import { R, Result } from '@praha/byethrow';
 import * as z from 'zod';
-import { zPokemonVariant } from '../../generated/zod.gen.js';
+import { zPokemonVariant } from '../../../generated/zod.gen.js';
 import type {
   ListPokemonData,
   ListPokemonResponse,
-} from '../../generated/types.gen.js';
-import { PokemonDataParseError } from '../pokemon.errors.js';
-import { PokemonRepository } from '../pokemon.repository.js';
+} from '../../../generated/types.gen.js';
+import { PokemonDataParseError } from '../../domain/pokemon.errors.js';
+import type { IPokemonRepository } from "../../domain/pokemon.repository.interface.js";
+import {  POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
 
 @Injectable()
 export class ListPokemonsQuery {
-  constructor(private readonly repository: PokemonRepository) {}
+  constructor(
+    @Inject(POKEMON_REPOSITORY_TOKEN)
+    private readonly repository: IPokemonRepository,
+  ) {}
 
   async get(
     query?: ListPokemonData['query'],

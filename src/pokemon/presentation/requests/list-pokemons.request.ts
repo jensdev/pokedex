@@ -5,11 +5,11 @@ import {
   Query,
 } from '@nestjs/common';
 import { match } from 'ts-pattern';
-import type { PokedexControllerMethods } from '../../generated/nestjs.gen.js';
-import type { ListPokemonData } from '../../generated/types.gen.js';
-import { zListPokemonQuery } from '../../generated/zod.gen.js';
-import { ZodPipe } from '../../zod.pipe.js';
-import { ListPokemonsQuery } from '../queries/list-pokemons.query.js';
+import type { PokedexControllerMethods } from '../../../generated/nestjs.gen.js';
+import type { ListPokemonData } from '../../../generated/types.gen.js';
+import { zListPokemonQuery } from '../../../generated/zod.gen.js';
+import { ZodPipe } from '../../../zod.pipe.js';
+import { ListPokemonsQuery } from '../../application/queries/list-pokemons.query.js';
 
 @Controller('pokemon')
 export class ListPokemonsRequest implements Pick<

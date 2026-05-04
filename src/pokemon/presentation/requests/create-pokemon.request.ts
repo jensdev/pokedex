@@ -1,9 +1,9 @@
 import { Body, Controller, Post } from '@nestjs/common';
-import type { PokedexControllerMethods } from '../../generated/nestjs.gen.js';
-import type { CreatePokemonData } from '../../generated/types.gen.js';
-import { zCreatePokemonBody } from '../../generated/zod.gen.js';
-import { ZodPipe } from '../../zod.pipe.js';
-import { CreatePokemonCommand } from '../commands/create-pokemon.command.js';
+import type { PokedexControllerMethods } from '../../../generated/nestjs.gen.js';
+import type { CreatePokemonData } from '../../../generated/types.gen.js';
+import { zCreatePokemonBody } from '../../../generated/zod.gen.js';
+import { ZodPipe } from '../../../zod.pipe.js';
+import { CreatePokemonCommand } from '../../application/commands/create-pokemon.command.js';
 
 @Controller('pokemon')
 export class CreatePokemonRequest implements Pick<

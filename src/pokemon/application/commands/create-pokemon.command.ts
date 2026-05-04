@@ -1,15 +1,19 @@
-import { Injectable } from '@nestjs/common';
+import { Inject, Injectable } from '@nestjs/common';
 import type {
   CreatePokemonRequest,
   PokemonVariant,
-} from '../../generated/types.gen.js';
-import { PokemonRepository } from '../pokemon.repository.js';
-import { Pokemon } from '../domain/pokemon.entity.js';
-import { Height, Stats, Weight } from '../domain/value-objects.js';
+} from '../../../generated/types.gen.js';
+import type { IPokemonRepository } from "../../domain/pokemon.repository.interface.js";
+import {  POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
+import { Pokemon } from '../../domain/pokemon.entity.js';
+import { Height, Stats, Weight } from '../../domain/value-objects.js';
 
 @Injectable()
 export class CreatePokemonCommand {
-  constructor(private readonly repository: PokemonRepository) {}
+  constructor(
+    @Inject(POKEMON_REPOSITORY_TOKEN)
+    private readonly repository: IPokemonRepository,
+  ) {}
 
   async handle(body: CreatePokemonRequest): Promise<PokemonVariant> {
     const stats = Stats.create(body.baseStats);

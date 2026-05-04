@@ -1,12 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import * as z from 'zod';
-import { zPokemonVariant } from '../generated/zod.gen.js';
-import type { PokemonVariant } from '../generated/types.gen.js';
-import { rawPokemon } from './pokemon.constants.js';
-import { Pokemon } from './domain/pokemon.entity.js';
+import { zPokemonVariant } from '../../../generated/zod.gen.js';
+import type { PokemonVariant } from '../../../generated/types.gen.js';
+import { rawPokemon } from '../pokemon.constants.js';
+import { Pokemon } from '../../domain/pokemon.entity.js';
+import { IPokemonRepository } from '../../domain/pokemon.repository.interface.js';
 
 @Injectable()
-export class PokemonRepository {
+export class PokemonRepository implements IPokemonRepository {
   private pokemon: PokemonVariant[] = z
     .array(zPokemonVariant)
     .parse(rawPokemon);
