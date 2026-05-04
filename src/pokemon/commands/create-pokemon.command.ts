@@ -1,53 +1,36 @@
 import { Injectable } from '@nestjs/common';
-import { match } from 'ts-pattern';
 import type {
   CreatePokemonRequest,
   PokemonVariant,
 } from '../../generated/types.gen.js';
 import { PokemonRepository } from '../pokemon.repository.js';
+import { Pokemon } from '../domain/pokemon.entity.js';
+import { Height, Stats, Weight } from '../domain/value-objects.js';
 
 @Injectable()
 export class CreatePokemonCommand {
   constructor(private readonly repository: PokemonRepository) {}
 
   async handle(body: CreatePokemonRequest): Promise<PokemonVariant> {
-    const now = new Date().toISOString();
+    const stats = Stats.create(body.baseStats);
+    const height = Height.create(body.heightMetres);
+    const weight = Weight.create(body.weightKg);
 
-    const base = {
+    const pokemonEntity = Pokemon.create({
       id: this.repository.nextId(),
       name: body.name,
       primaryType: body.primaryType,
       secondaryType: body.secondaryType,
-      baseStats: body.baseStats,
-      heightMetres: body.heightMetres,
-      weightKg: body.weightKg,
+      baseStats: stats,
+      heightMetres: height,
+      weightKg: weight,
       isObtainable: body.isObtainable,
-      createdAt: now,
-      updatedAt: now,
-    };
+      classification: body.classification,
+    });
 
-    const pokemon: PokemonVariant = match(body.classification)
-      .with('legendary', (classification) => ({
-        ...base,
-        classification,
-        legendaryGroup: 'Unknown',
-        isBoxLegendary: false,
-      }))
-      .with('mythical', (classification) => ({
-        ...base,
-        classification,
-        distributionMethod: 'Unknown',
-        isCurrentlyDistributed: false,
-        loreDescription: 'A newly discovered Mythical Pokemon.',
-      }))
-      .with('normal', (classification) => ({
-        ...base,
-        classification,
-        encounterRate: 50,
-      }))
-      .exhaustive();
+    const pokemonDto = pokemonEntity.toDto();
+    this.repository.create(pokemonDto);
 
-    this.repository.create(pokemon);
-    return Promise.resolve(pokemon);
+    return Promise.resolve(pokemonDto);
   }
 }
