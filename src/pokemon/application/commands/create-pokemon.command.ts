@@ -20,35 +20,29 @@ export class CreatePokemonCommand {
   handle(
     body: CreatePokemonRequest,
   ): Result.ResultAsync<PokemonVariant, InvalidPokemonAttributeError> {
-    const stats = Stats.create(body.baseStats);
-    if (R.isFailure(stats)) {
-      return Promise.resolve(stats);
-    }
-
-    const height = Height.create(body.heightMetres);
-    if (R.isFailure(height)) {
-      return Promise.resolve(height);
-    }
-
-    const weight = Weight.create(body.weightKg);
-    if (R.isFailure(weight)) {
-      return Promise.resolve(weight);
-    }
-
-    const pokemonEntity = Pokemon.create({
-      id: this.repository.nextId(),
-      name: body.name,
-      primaryType: body.primaryType,
-      secondaryType: body.secondaryType,
-      baseStats: stats.value,
-      heightMetres: height.value,
-      weightKg: weight.value,
-      isObtainable: body.isObtainable,
-      classification: body.classification,
-    });
-
-    this.repository.save(pokemonEntity);
-
-    return Promise.resolve(R.succeed(pokemonEntity.toDto()));
+    return R.pipe(
+      R.do(),
+      R.bind('baseStats', () => Stats.create(body.baseStats)),
+      R.bind('heightMetres', () => Height.create(body.heightMetres)),
+      R.bind('weightKg', () => Weight.create(body.weightKg)),
+      R.andThen(async (valueObjects) =>
+        R.succeed(
+          Pokemon.create({
+            id: await this.repository.nextId(),
+            name: body.name,
+            primaryType: body.primaryType,
+            secondaryType: body.secondaryType,
+            isObtainable: body.isObtainable,
+            classification: body.classification,
+            ...valueObjects,
+          }),
+        ),
+      ),
+      R.andThrough(async (pokemon) => {
+        await this.repository.save(pokemon);
+        return R.succeed();
+      }),
+      R.map((pokemon) => pokemon.toDto()),
+    );
   }
 }

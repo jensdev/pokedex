@@ -1,9 +1,10 @@
-import { BadRequestException, Body, Controller, Post } from '@nestjs/common';
+import { Body, Controller, Post } from '@nestjs/common';
 import { match } from 'ts-pattern';
 import type { PokedexControllerMethods } from '../../../generated/nestjs.gen.js';
 import type { CreatePokemonData } from '../../../generated/types.gen.js';
 import { zCreatePokemonBody } from '../../../generated/zod.gen.js';
 import { CreatePokemonCommand } from '../../application/commands/create-pokemon.command.js';
+import { throwHttpException } from '../http-error.mapper.js';
 
 @Controller('pokemon')
 export class CreatePokemonController implements Pick<
@@ -20,9 +21,7 @@ export class CreatePokemonController implements Pick<
 
     return match(result)
       .with({ type: 'Success' }, ({ value }) => value)
-      .with({ type: 'Failure' }, ({ error }) => {
-        throw new BadRequestException(error.message);
-      })
+      .with({ type: 'Failure' }, ({ error }) => throwHttpException(error))
       .exhaustive();
   }
 }

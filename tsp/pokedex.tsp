@@ -57,9 +57,7 @@ interface PokedexController {
   getById(
     @path
     @doc("National Pokedex number.")
-    @minValue(1)
-    @maxValue(1025)
-    id: int32,
+    id: pokedexNumber,
   ): OkResponse & Body<PokemonVariant> | NotFoundResponse | ApiError;
 
   /**
@@ -80,7 +78,7 @@ interface PokedexController {
   @summary("Replace Pokemon")
   @operationId("replacePokemon")
   replace(
-    @path id: int32,
+    @path id: pokedexNumber,
     @body body: UpdatePokemonRequest,
   ): OkResponse & Body<PokemonVariant> | NotFoundResponse | ApiError;
 
@@ -92,6 +90,6 @@ interface PokedexController {
   @summary("Delete Pokemon")
   @operationId("deletePokemon")
   remove(
-    @path id: int32,
+    @path id: pokedexNumber,
   ): NoContentResponse | NotFoundResponse | ApiError;
 }

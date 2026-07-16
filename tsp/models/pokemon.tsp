@@ -33,6 +33,11 @@ enum PokemonType {
   Water: "water",
 }
 
+/** National Pokedex number (e.g. 1 for Bulbasaur). */
+@minValue(1)
+@maxValue(1025)
+scalar pokedexNumber extends int32;
+
 /** Six base stats shared by every Pokemon. */
 model PokemonBaseStats {
   hp: int32;
@@ -50,9 +55,7 @@ model PokemonBaseStats {
 @discriminator("classification")
 model Pokemon {
   /** National Pokedex number (e.g. 1 for Bulbasaur). */
-  @minValue(1)
-  @maxValue(1025)
-  id: int32;
+  id: pokedexNumber;
 
   /** Species name in lowercase (e.g. "bulbasaur"). */
   @minLength(1)

@@ -9,7 +9,6 @@ export default defineConfig({
   },
   plugins: [
     'nestjs',
-    '@hey-api/sdk',
     {
       name: 'zod',
       // Path and query parameters always arrive as strings over HTTP, but the

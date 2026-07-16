@@ -174,10 +174,7 @@ paths:
           required: true
           description: National Pokedex number.
           schema:
-            type: integer
-            format: int32
-            minimum: 1
-            maximum: 1025
+            $ref: '#/components/schemas/pokedexNumber'
       responses:
         '200':
           description: The request has succeeded.
@@ -204,8 +201,7 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
-            format: int32
+            $ref: '#/components/schemas/pokedexNumber'
       responses:
         '200':
           description: The request has succeeded.
@@ -238,8 +234,7 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
-            format: int32
+            $ref: '#/components/schemas/pokedexNumber'
       responses:
         '204':
           description: There is no content to send for this request, but the headers may be useful.
@@ -540,10 +535,8 @@ components:
         - classification
       properties:
         id:
-          type: integer
-          format: int32
-          minimum: 1
-          maximum: 1025
+          allOf:
+            - $ref: '#/components/schemas/pokedexNumber'
           description: National Pokedex number (e.g. 1 for Bulbasaur).
         name:
           type: string
@@ -696,6 +689,12 @@ components:
         classification:
           $ref: '#/components/schemas/PokemonClassification'
       description: Payload for fully replacing an existing Pokemon entry.
+    pokedexNumber:
+      type: integer
+      format: int32
+      minimum: 1
+      maximum: 1025
+      description: National Pokedex number (e.g. 1 for Bulbasaur).
 servers:
   - url: http://localhost:3000
     description: Local development server

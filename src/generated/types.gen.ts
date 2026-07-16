@@ -161,7 +161,7 @@ export type Pokemon = {
   /**
    * National Pokedex number (e.g. 1 for Bulbasaur).
    */
-  id: number;
+  id: PokedexNumber;
   /**
    * Species name in lowercase (e.g. "bulbasaur").
    */
@@ -264,6 +264,11 @@ export type UpdatePokemonRequest = {
   isObtainable: boolean;
   classification: PokemonClassification;
 };
+
+/**
+ * National Pokedex number (e.g. 1 for Bulbasaur).
+ */
+export type PokedexNumber = number;
 
 /**
  * Filter by classification.
@@ -481,7 +486,7 @@ export type CreatePokemonResponse =
 export type DeletePokemonData = {
   body?: never;
   path: {
-    id: number;
+    id: PokedexNumber;
   };
   query?: never;
   url: '/pokemon/{id}';
@@ -516,7 +521,7 @@ export type GetPokemonByIdData = {
     /**
      * National Pokedex number.
      */
-    id: number;
+    id: PokedexNumber;
   };
   query?: never;
   url: '/pokemon/{id}';
@@ -549,7 +554,7 @@ export type GetPokemonByIdResponse =
 export type ReplacePokemonData = {
   body: UpdatePokemonRequest;
   path: {
-    id: number;
+    id: PokedexNumber;
   };
   query?: never;
   url: '/pokemon/{id}';

@@ -1,14 +1,10 @@
-import {
-  Controller,
-  Get,
-  InternalServerErrorException,
-  Query,
-} from '@nestjs/common';
+import { Controller, Get, Query } from '@nestjs/common';
 import { match } from 'ts-pattern';
 import type { PokedexControllerMethods } from '../../../generated/nestjs.gen.js';
 import type { ListPokemonData } from '../../../generated/types.gen.js';
 import { zListPokemonQuery } from '../../../generated/zod.gen.js';
 import { ListPokemonsQuery } from '../../application/queries/list-pokemons.query.js';
+import { throwHttpException } from '../http-error.mapper.js';
 
 @Controller('pokemon')
 export class ListPokemonsController implements Pick<
@@ -25,9 +21,7 @@ export class ListPokemonsController implements Pick<
 
     return match(result)
       .with({ type: 'Success' }, ({ value }) => value)
-      .with({ type: 'Failure' }, ({ error }) => {
-        throw new InternalServerErrorException(error);
-      })
+      .with({ type: 'Failure' }, ({ error }) => throwHttpException(error))
       .exhaustive();
   }
 }

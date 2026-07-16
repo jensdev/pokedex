@@ -2,7 +2,7 @@
 
 A **contract-first** NestJS Pokédex API built with [TypeSpec](https://typespec.io/), [OpenAPI](https://www.openapis.org/), and [@hey-api/openapi-ts](https://heyapi.dev/).
 
-The API is defined in TypeSpec, compiled to an OpenAPI 3.0 spec, and then used to generate TypeScript types, Zod schemas, NestJS controller interfaces, and an SDK — keeping the implementation and documentation in sync by design.
+The API is defined in TypeSpec, compiled to an OpenAPI 3.0 spec, and then used to generate TypeScript types, Zod schemas, and NestJS controller interfaces — keeping the implementation and documentation in sync by design.
 
 ## Architecture
 
@@ -51,8 +51,7 @@ graph TD
 │   ├── generated/          # Auto-generated code (DO NOT EDIT)
 │   │   ├── types.gen.ts    #   TypeScript types
 │   │   ├── zod.gen.ts      #   Zod validation schemas
-│   │   ├── nestjs.gen.ts   #   NestJS controller interfaces
-│   │   └── sdk.gen.ts      #   API client SDK
+│   │   └── nestjs.gen.ts   #   NestJS controller interfaces
 │   ├── pokemon/            # Pokemon module (Clean Architecture)
 │   │   ├── presentation/   #   Controllers (one per endpoint)
 │   │   ├── application/    #   Commands & Queries
@@ -80,8 +79,8 @@ graph TD
 # Install dependencies
 npm install
 
-# Compile TypeSpec -> OpenAPI and generate types, Zod schemas,
-# NestJS interfaces & SDK in one step
+# Compile TypeSpec -> OpenAPI and generate types, Zod schemas
+# & NestJS interfaces in one step
 npm run generate
 
 # Start the dev server (watch mode)
@@ -112,7 +111,7 @@ See [AGENTS.md](./AGENTS.md) and [GEMINI.md](./GEMINI.md) for architectural conv
 | Library                                                       | Purpose                                                           |
 | ------------------------------------------------------------- | ----------------------------------------------------------------- |
 | [`@typespec/compiler`](https://typespec.io/)                  | API-first contract definition language                            |
-| [`@hey-api/openapi-ts`](https://heyapi.dev/)                  | Generate types, Zod schemas, NestJS interfaces & SDK from OpenAPI |
+| [`@hey-api/openapi-ts`](https://heyapi.dev/)                  | Generate types, Zod schemas & NestJS interfaces from OpenAPI      |
 | [`zod`](https://zod.dev/)                                     | Runtime request validation via generated schemas                  |
 | [`@praha/byethrow`](https://github.com/praha-inc/byethrow)    | Type-safe `Result` monad for error handling                       |
 | [`@praha/error-factory`](https://github.com/praha-inc/praha)  | Factory for creating structured, type-safe errors                 |

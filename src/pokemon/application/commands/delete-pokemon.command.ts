@@ -12,15 +12,15 @@ export class DeletePokemonCommand {
     private readonly repository: IPokemonRepository,
   ) {}
 
-  handle(idValue: number): Result.ResultAsync<void, PokemonNotFoundError> {
+  async handle(idValue: number): Result.ResultAsync<void, PokemonNotFoundError> {
     const id = PokemonId.create(idValue);
-    const existingEntity = this.repository.findById(id);
+    const existing = await this.repository.findById(id);
 
-    if (!existingEntity) {
-      return Promise.resolve(R.fail(new PokemonNotFoundError()));
+    if (!existing) {
+      return R.fail(new PokemonNotFoundError({ id: idValue }));
     }
 
-    this.repository.remove(id);
-    return Promise.resolve(R.succeed(undefined));
+    await this.repository.remove(id);
+    return R.succeed(undefined);
   }
 }

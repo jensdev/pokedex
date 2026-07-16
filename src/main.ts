@@ -8,6 +8,7 @@ async function bootstrap() {
   // (e.g. @Body({ schema: z... })) against its Standard Schema. Replaces the
   // old custom ZodPipe now that Zod schemas are Standard Schema-compatible.
   app.useGlobalPipes(new StandardSchemaValidationPipe());
+  app.enableShutdownHooks();
   await app.listen(process.env.PORT ?? 3000);
 }
 void bootstrap();

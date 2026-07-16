@@ -1,11 +1,4 @@
-import {
-  BadRequestException,
-  Body,
-  Controller,
-  NotFoundException,
-  Param,
-  Put,
-} from '@nestjs/common';
+import { Body, Controller, Param, Put } from '@nestjs/common';
 import { match } from 'ts-pattern';
 import type { PokedexControllerMethods } from '../../../generated/nestjs.gen.js';
 import type { ReplacePokemonData } from '../../../generated/types.gen.js';
@@ -14,6 +7,7 @@ import {
   zReplacePokemonPath,
 } from '../../../generated/zod.gen.js';
 import { ReplacePokemonCommand } from '../../application/commands/replace-pokemon.command.js';
+import { throwHttpException } from '../http-error.mapper.js';
 
 @Controller('pokemon')
 export class ReplacePokemonController implements Pick<
@@ -31,15 +25,7 @@ export class ReplacePokemonController implements Pick<
 
     return match(result)
       .with({ type: 'Success' }, ({ value }) => value)
-      .with(
-        { type: 'Failure', error: { name: 'PokemonNotFoundError' } },
-        () => {
-          throw new NotFoundException(`Pokemon with id ${path.id} not found`);
-        },
-      )
-      .with({ type: 'Failure' }, ({ error }) => {
-        throw new BadRequestException(error.message);
-      })
+      .with({ type: 'Failure' }, ({ error }) => throwHttpException(error))
       .exhaustive();
   }
 }

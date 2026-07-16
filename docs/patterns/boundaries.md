@@ -8,7 +8,7 @@ The **Domain Layer** (`src/*/domain/`) is the heart of the application. It must 
 
 1.  **No NestJS in Domain**: Never use NestJS decorators (`@Injectable`, `@Controller`, etc.) inside domain entities or value objects.
 2.  **No Persistence in Domain**: Domain entities are not database models. They should not contain ORM decorators or logic.
-3.  **No runtime schemas in Domain**: The domain must not import the generated **Zod** schemas (`zod.gen.ts`) or run validation itself. It *may* reference generated **types** (`types.gen.ts`) at compile time to describe its DTO shape — e.g. `Pokemon` wraps a `PokemonVariant` as its internal state. This is a pragmatic trade-off: the discriminated-union shape is authored once in TypeSpec, and re-declaring it by hand in the domain would only invite drift. Runtime validation stays at the presentation boundary.
+3.  **No runtime schemas in Domain**: The domain must not import the generated **Zod** schemas (`zod.gen.ts`) or run validation itself. It *may* reference generated **types** (`types.gen.ts`) at compile time to describe its DTO shape — e.g. `Pokemon` wraps a `PokemonVariant` as its internal state. This is a pragmatic trade-off: the discriminated-union shape is authored once in TypeSpec, and re-declaring it by hand in the domain would only invite drift. Runtime validation happens at the *edges*: the presentation boundary (incoming HTTP data) and the infrastructure boundary (untrusted source data).
 4.  **Invariants in the domain**: Entities and Value Objects (`Stats`, `Height`, `Weight`, `PokemonId`) enforce business invariants at construction. Expected failures are returned as a `Result` (see *Error Boundaries*); only true programming invariants (e.g. a non-positive `PokemonId` that was already validated upstream) may throw.
 
 ## Boundary Map
@@ -30,6 +30,24 @@ Controllers receive DTOs (validated by Zod). These are passed to Application ser
 ```typescript
 // Good: Reconstituting a domain entity from a validated DTO
 const pokemon = Pokemon.load(dto); 
+```
+
+### 1b. Inbound (Infrastructure -> Domain)
+Repository adapters are the boundary for *stored/external* data. The port
+(`IPokemonRepository`) speaks domain language — entities in, entities out —
+and the adapter validates untrusted source data with the generated Zod
+schemas before it constructs entities. A malformed payload becomes a typed
+failure, never raw data leaking upward.
+
+```typescript
+// In the infrastructure adapter
+async findAll(): Result.ResultAsync<Pokemon[], PokemonDataParseError> {
+  return R.pipe(
+    R.parse(z.array(zPokemonVariant), await this.fetchRaw()),
+    R.mapError(() => new PokemonDataParseError()),
+    R.map((items) => items.map((item) => Pokemon.load(item))),
+  );
+}
 ```
 
 ### 2. Outbound (Domain -> Presentation)

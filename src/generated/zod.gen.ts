@@ -157,11 +157,30 @@ export const zCreatePokemonRequest = z.object({
 });
 
 /**
+ * Payload for fully replacing an existing Pokemon entry.
+ */
+export const zUpdatePokemonRequest = z.object({
+  name: z.string().min(1).max(100),
+  primaryType: zPokemonType,
+  secondaryType: zPokemonType.optional(),
+  baseStats: zPokemonBaseStats,
+  heightMetres: z.coerce.number().gte(0),
+  weightKg: z.coerce.number().gte(0),
+  isObtainable: z.boolean(),
+  classification: zPokemonClassification,
+});
+
+/**
+ * National Pokedex number (e.g. 1 for Bulbasaur).
+ */
+export const zPokedexNumber = z.coerce.number().gte(1).lte(1025);
+
+/**
  * Base Pokemon model. The `classification` property is the discriminator —
  * concrete sub-types narrow it to a string literal.
  */
 export const zPokemon = z.object({
-  id: z.coerce.number().gte(1).lte(1025),
+  id: zPokedexNumber,
   name: z.string().min(1).max(100),
   primaryType: zPokemonType,
   secondaryType: zPokemonType.optional(),
@@ -250,20 +269,6 @@ export const zPokemonVariant = z.union([
   zLegendaryPokemon,
   zMythicalPokemon,
 ]);
-
-/**
- * Payload for fully replacing an existing Pokemon entry.
- */
-export const zUpdatePokemonRequest = z.object({
-  name: z.string().min(1).max(100),
-  primaryType: zPokemonType,
-  secondaryType: zPokemonType.optional(),
-  baseStats: zPokemonBaseStats,
-  heightMetres: z.coerce.number().gte(0),
-  weightKg: z.coerce.number().gte(0),
-  isObtainable: z.boolean(),
-  classification: zPokemonClassification,
-});
 
 /**
  * Filter by classification.
@@ -381,14 +386,7 @@ export const zCreatePokemonBody = zCreatePokemonRequest;
 export const zCreatePokemonResponse = zPokemonVariant;
 
 export const zDeletePokemonPath = z.object({
-  id: z.coerce
-    .number()
-    .min(-2147483648, {
-      error: 'Invalid value: Expected int32 to be >= -2147483648',
-    })
-    .max(2147483647, {
-      error: 'Invalid value: Expected int32 to be <= 2147483647',
-    }),
+  id: zPokedexNumber,
 });
 
 /**
@@ -397,7 +395,7 @@ export const zDeletePokemonPath = z.object({
 export const zDeletePokemonResponse = z.void();
 
 export const zGetPokemonByIdPath = z.object({
-  id: z.coerce.number().gte(1).lte(1025),
+  id: zPokedexNumber,
 });
 
 /**
@@ -408,14 +406,7 @@ export const zGetPokemonByIdResponse = zPokemonVariant;
 export const zReplacePokemonBody = zUpdatePokemonRequest;
 
 export const zReplacePokemonPath = z.object({
-  id: z.coerce
-    .number()
-    .min(-2147483648, {
-      error: 'Invalid value: Expected int32 to be >= -2147483648',
-    })
-    .max(2147483647, {
-      error: 'Invalid value: Expected int32 to be <= 2147483647',
-    }),
+  id: zPokedexNumber,
 });
 
 /**

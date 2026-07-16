@@ -1,15 +1,10 @@
-import {
-  Controller,
-  Delete,
-  HttpCode,
-  NotFoundException,
-  Param,
-} from '@nestjs/common';
+import { Controller, Delete, HttpCode, Param } from '@nestjs/common';
 import { match } from 'ts-pattern';
 import type { PokedexControllerMethods } from '../../../generated/nestjs.gen.js';
 import type { DeletePokemonData } from '../../../generated/types.gen.js';
 import { zDeletePokemonPath } from '../../../generated/zod.gen.js';
 import { DeletePokemonCommand } from '../../application/commands/delete-pokemon.command.js';
+import { throwHttpException } from '../http-error.mapper.js';
 
 @Controller('pokemon')
 export class DeletePokemonController implements Pick<
@@ -27,9 +22,7 @@ export class DeletePokemonController implements Pick<
 
     match(result)
       .with({ type: 'Success' }, () => {})
-      .with({ type: 'Failure' }, () => {
-        throw new NotFoundException(`Pokemon with id ${path.id} not found`);
-      })
+      .with({ type: 'Failure' }, ({ error }) => throwHttpException(error))
       .exhaustive();
   }
 }
