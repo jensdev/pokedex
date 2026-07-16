@@ -12,7 +12,6 @@ import {
   zReplacePokemonBody,
   zReplacePokemonPath,
 } from '../../../generated/zod.gen.js';
-import { ZodPipe } from '../../../zod.pipe.js';
 import { ReplacePokemonCommand } from '../../application/commands/replace-pokemon.command.js';
 
 @Controller('pokemon')
@@ -24,8 +23,8 @@ export class ReplacePokemonController implements Pick<
 
   @Put(':id')
   async replacePokemon(
-    @Param(new ZodPipe(zReplacePokemonPath)) path: ReplacePokemonData['path'],
-    @Body(new ZodPipe(zReplacePokemonBody)) body: ReplacePokemonData['body'],
+    @Param({ schema: zReplacePokemonPath }) path: ReplacePokemonData['path'],
+    @Body({ schema: zReplacePokemonBody }) body: ReplacePokemonData['body'],
   ) {
     const result = await this.command.handle(path.id, body);
 

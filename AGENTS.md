@@ -12,7 +12,7 @@ This repository contains instructions for AI agents (like Gemini, Claude, or Git
 
 - **Schema-First**: All API definitions MUST start in `tsp/` files. Never manually edit files in `src/generated/`.
 - **Explicit Error Handling**: Business logic MUST NOT throw exceptions. Use the `Result` type from `@praha/byethrow` to return typed Success/Failure states.
-- **Strict Validation**: All incoming data MUST be validated using the generated Zod schemas and `ZodPipe`.
+- **Strict Validation**: All incoming data MUST be validated using the generated Zod schemas passed to the route decorator's native `schema` option (e.g. `@Body({ schema: z... })`). Zod schemas are Standard Schema-compatible, so NestJS 12 validates them natively — no custom pipe.
 - **Clean Architecture**: Maintain strict separation between Presentation, Application, Domain, and Infrastructure layers.
 
 ## Project Structure
@@ -34,7 +34,7 @@ This repository contains instructions for AI agents (like Gemini, Claude, or Git
 
 ### 2. Controllers
 - Controllers MUST implement the generated interface from `src/generated/nestjs.gen.ts` (usually using `Pick`).
-- Use `@Body(new ZodPipe(z...))` for request body validation.
+- Use the native Standard Schema option for validation: `@Body({ schema: z... })`, `@Query({ schema: z... })`, `@Param({ schema: z... })` with the generated Zod schemas.
 - Use `ts-pattern` (`match`) to handle the `Result` returned by the application layer and map it to HTTP responses/exceptions.
 
 ### 3. Application Layer (Commands/Queries)
