@@ -9,3 +9,9 @@ export class PokemonDataParseError extends ErrorFactory({
   name: 'PokemonDataParseError',
   message: 'Pokemon data from source failed to parse',
 }) {}
+
+export class InvalidPokemonAttributeError extends ErrorFactory({
+  name: 'InvalidPokemonAttributeError',
+  message: ({ reason }) => reason,
+  fields: ErrorFactory.fields<{ reason: string }>(),
+}) {}

@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   NotFoundException,
@@ -30,8 +31,14 @@ export class ReplacePokemonController implements Pick<
 
     return match(result)
       .with({ type: 'Success' }, ({ value }) => value)
-      .with({ type: 'Failure' }, () => {
-        throw new NotFoundException(`Pokemon with id ${path.id} not found`);
+      .with(
+        { type: 'Failure', error: { name: 'PokemonNotFoundError' } },
+        () => {
+          throw new NotFoundException(`Pokemon with id ${path.id} not found`);
+        },
+      )
+      .with({ type: 'Failure' }, ({ error }) => {
+        throw new BadRequestException(error.message);
       })
       .exhaustive();
   }

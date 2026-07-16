@@ -1,9 +1,4 @@
-import {
-  Body,
-  Controller,
-  Post,
-  InternalServerErrorException,
-} from '@nestjs/common';
+import { BadRequestException, Body, Controller, Post } from '@nestjs/common';
 import { match } from 'ts-pattern';
 import type { PokedexControllerMethods } from '../../../generated/nestjs.gen.js';
 import type { CreatePokemonData } from '../../../generated/types.gen.js';
@@ -25,8 +20,8 @@ export class CreatePokemonController implements Pick<
 
     return match(result)
       .with({ type: 'Success' }, ({ value }) => value)
-      .with({ type: 'Failure' }, () => {
-        throw new InternalServerErrorException();
+      .with({ type: 'Failure' }, ({ error }) => {
+        throw new BadRequestException(error.message);
       })
       .exhaustive();
   }

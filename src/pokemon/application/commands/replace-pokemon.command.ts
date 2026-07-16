@@ -1,15 +1,21 @@
-import { Pokemon } from '../../domain/pokemon.entity.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { R, Result } from '@praha/byethrow';
-import { match } from 'ts-pattern';
 import type {
   PokemonVariant,
   UpdatePokemonRequest,
 } from '../../../generated/types.gen.js';
-import { PokemonNotFoundError } from '../../domain/pokemon.errors.js';
+import {
+  InvalidPokemonAttributeError,
+  PokemonNotFoundError,
+} from '../../domain/pokemon.errors.js';
 import type { IPokemonRepository } from '../../domain/pokemon.repository.interface.js';
 import { POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
-import { PokemonId } from '../../domain/value-objects.js';
+import {
+  Height,
+  PokemonId,
+  Stats,
+  Weight,
+} from '../../domain/value-objects.js';
 
 @Injectable()
 export class ReplacePokemonCommand {
@@ -21,69 +27,40 @@ export class ReplacePokemonCommand {
   handle(
     idValue: number,
     body: UpdatePokemonRequest,
-  ): Result.ResultAsync<PokemonVariant, PokemonNotFoundError> {
-    const id = PokemonId.create(idValue);
-    const existingEntity = this.repository.findById(id);
-
-    if (!existingEntity) {
+  ): Result.ResultAsync<
+    PokemonVariant,
+    PokemonNotFoundError | InvalidPokemonAttributeError
+  > {
+    const existing = this.repository.findById(PokemonId.create(idValue));
+    if (!existing) {
       return Promise.resolve(R.fail(new PokemonNotFoundError()));
     }
 
-    const existing = existingEntity.toDto();
+    const stats = Stats.create(body.baseStats);
+    if (R.isFailure(stats)) return Promise.resolve(stats);
 
-    const now = new Date().toISOString();
-    const base = {
-      id: existing.id,
+    const height = Height.create(body.heightMetres);
+    if (R.isFailure(height)) {
+      return Promise.resolve(height);
+    }
+
+    const weight = Weight.create(body.weightKg);
+    if (R.isFailure(weight)) {
+      return Promise.resolve(weight);
+    }
+
+    const updated = existing.replace({
       name: body.name,
       primaryType: body.primaryType,
       secondaryType: body.secondaryType,
-      baseStats: body.baseStats,
-      heightMetres: body.heightMetres,
-      weightKg: body.weightKg,
+      baseStats: stats.value,
+      heightMetres: height.value,
+      weightKg: weight.value,
       isObtainable: body.isObtainable,
-      createdAt: existing.createdAt,
-      updatedAt: now,
-    };
+      classification: body.classification,
+    });
 
-    const pokemon: PokemonVariant = match(body.classification)
-      .with('legendary', (classification) => ({
-        ...base,
-        classification,
-        legendaryGroup:
-          existing.classification === 'legendary'
-            ? existing.legendaryGroup
-            : 'Unknown',
-        isBoxLegendary:
-          existing.classification === 'legendary'
-            ? existing.isBoxLegendary
-            : false,
-      }))
-      .with('mythical', (classification) => ({
-        ...base,
-        classification,
-        distributionMethod:
-          existing.classification === 'mythical'
-            ? existing.distributionMethod
-            : 'Unknown',
-        isCurrentlyDistributed:
-          existing.classification === 'mythical'
-            ? existing.isCurrentlyDistributed
-            : false,
-        loreDescription:
-          existing.classification === 'mythical'
-            ? existing.loreDescription
-            : 'A newly discovered Mythical Pokemon.',
-      }))
-      .with('normal', (classification) => ({
-        ...base,
-        classification,
-        encounterRate: 50,
-      }))
-      .exhaustive();
-
-    const updatedEntity = Pokemon.load(pokemon);
-
-    this.repository.save(updatedEntity);
-    return Promise.resolve(R.succeed(updatedEntity.toDto()));
+    this.repository.save(updated);
+    return Promise.resolve(R.succeed(updated.toDto()));
   }
 }

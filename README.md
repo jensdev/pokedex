@@ -32,9 +32,9 @@ graph TD
 | Concept                   | How it works                                                                                                                                                                     |
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Contract-first**        | The API contract is authored in TypeSpec (`tsp/`). All generated code derives from it.                                                                                           |
-| **Granular Controllers**  | Instead of monolithic controllers, each endpoint is handled by a "Request" class (e.g., `CreatePokemonRequest`) that implements a specific method from the generated interfaces. |
+| **Granular Controllers**  | Instead of monolithic controllers, each endpoint is handled by its own controller class (e.g., `CreatePokemonController`) that implements a single method (`Pick<…>`) of the generated interface. |
 | **Application Layer**     | Business logic is encapsulated in Commands and Queries, keeping the presentation layer (controllers) thin and focused on HTTP concerns.                                          |
-| **Runtime validation**    | A custom `ZodPipe` validates incoming request params/body against the generated Zod schemas.                                                                                     |
+| **Runtime validation**    | Generated Zod schemas are Standard Schema-compatible and passed to the route decorators (`@Body/@Query/@Param({ schema })`). NestJS 12's native `StandardSchemaValidationPipe` (registered in `src/main.ts`) validates them — no custom pipe. |
 | **Typed error handling**  | Services return `Result` types (`@praha/byethrow`) and use `@praha/error-factory` for domain-specific errors. Controllers pattern-match on results with `ts-pattern`.            |
 
 ## Project structure
@@ -54,25 +54,24 @@ graph TD
 │   │   ├── nestjs.gen.ts   #   NestJS controller interfaces
 │   │   └── sdk.gen.ts      #   API client SDK
 │   ├── pokemon/            # Pokemon module (Clean Architecture)
+│   │   ├── presentation/   #   Controllers (one per endpoint)
 │   │   ├── application/    #   Commands & Queries
 │   │   ├── domain/         #   Entities, Value Objects & Repository Interfaces
 │   │   ├── infrastructure/ #   Persistence (Repository implementation)
-│   │   ├── presentation/   #   Request Controllers
 │   │   └── pokemon.module.ts
-│   ├── health/             # Health module
-│   │   ├── queries/
-│   │   ├── requests/
+│   ├── health/             # Health module (same layering as pokemon)
+│   │   ├── presentation/   #   Controllers (one per endpoint)
+│   │   ├── application/    #   Queries (one per endpoint)
 │   │   └── health.module.ts
-│   ├── zod.pipe.ts         # Generic ZodPipe for request validation
 │   ├── app.module.ts
-│   └── main.ts
+│   └── main.ts             # Bootstraps the app + StandardSchemaValidationPipe
 ├── tspconfig.yaml          # TypeSpec compiler config
 └── tsconfig.json
 ```
 
 ## Prerequisites
 
-- **Node.js** ≥ 18
+- **Node.js** ≥ 22 (the project is native ESM and targets ES2023)
 - **npm**
 
 ## Getting started
@@ -81,17 +80,27 @@ graph TD
 # Install dependencies
 npm install
 
-# Compile the TypeSpec definitions into an OpenAPI spec
-npm run typespec:compile
-
-# Generate types, schemas, and NestJS interfaces from the OpenAPI spec
-npx openapi-ts
+# Compile TypeSpec -> OpenAPI and generate types, Zod schemas,
+# NestJS interfaces & SDK in one step
+npm run generate
 
 # Start the dev server (watch mode)
 npm run start:dev
 ```
 
 The API will be available at **http://localhost:3000**.
+
+## Scripts
+
+| Script              | Purpose                                                          |
+| ------------------- | ---------------------------------------------------------------- |
+| `npm run generate`  | Compile TypeSpec to OpenAPI, then regenerate `src/generated/`.   |
+| `npm run start:dev` | Start the dev server in watch mode (Rspack builder).             |
+| `npm run build`     | Production build via the Nest Rspack builder.                    |
+| `npm run lint`      | Lint & autofix with oxlint (generated code excluded).            |
+| `npm run test`      | Run unit specs (`*.spec.ts`) with Vitest.                        |
+| `npm run test:e2e`  | Run e2e specs (`*.e2e-spec.ts`) with Vitest.                     |
+| `npm run check`     | Quality gate: lint + build + unit tests.                         |
 
 ## Agent instructions
 
@@ -108,6 +117,14 @@ See [AGENTS.md](./AGENTS.md) and [GEMINI.md](./GEMINI.md) for architectural conv
 | [`@praha/byethrow`](https://github.com/praha-inc/byethrow)    | Type-safe `Result` monad for error handling                       |
 | [`@praha/error-factory`](https://github.com/praha-inc/praha)  | Factory for creating structured, type-safe errors                 |
 | [`ts-pattern`](https://github.com/gvergnaud/ts-pattern)       | Exhaustive pattern matching on `Result` types                     |
+
+## Tooling
+
+| Tool                                        | Purpose                                                     |
+| ------------------------------------------- | ----------------------------------------------------------- |
+| [`oxlint`](https://oxc.rs/docs/guide/usage/linter) | Fast Rust-based linter (replaces ESLint).            |
+| [`Vitest`](https://vitest.dev/)             | Unit & e2e test runner.                                     |
+| [`Rspack`](https://rspack.dev/)             | Build via the `@nestjs/cli` Rspack builder.                 |
 
 ## License
 

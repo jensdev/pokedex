@@ -4,12 +4,12 @@ This document defines the boundaries between different layers of our NestJS appl
 
 ## The Core Rule: Domain Purity
 
-The **Domain Layer** (`src/*/domain/`) is the heart of the application. It must remain "clean" and free from framework pollution.
+The **Domain Layer** (`src/*/domain/`) is the heart of the application. It must remain free from framework and runtime-infrastructure pollution.
 
 1.  **No NestJS in Domain**: Never use NestJS decorators (`@Injectable`, `@Controller`, etc.) inside domain entities or value objects.
 2.  **No Persistence in Domain**: Domain entities are not database models. They should not contain ORM decorators or logic.
-3.  **No External Schemas**: The domain should not depend on generated TypeSpec/Zod schemas. Use **Mappers** to convert between Domain Entities and DTOs.
-4.  **POJO/Classes Only**: The domain should consist of pure TypeScript classes and Value Objects that enforce invariants.
+3.  **No runtime schemas in Domain**: The domain must not import the generated **Zod** schemas (`zod.gen.ts`) or run validation itself. It *may* reference generated **types** (`types.gen.ts`) at compile time to describe its DTO shape — e.g. `Pokemon` wraps a `PokemonVariant` as its internal state. This is a pragmatic trade-off: the discriminated-union shape is authored once in TypeSpec, and re-declaring it by hand in the domain would only invite drift. Runtime validation stays at the presentation boundary.
+4.  **Invariants in the domain**: Entities and Value Objects (`Stats`, `Height`, `Weight`, `PokemonId`) enforce business invariants at construction. Expected failures are returned as a `Result` (see *Error Boundaries*); only true programming invariants (e.g. a non-positive `PokemonId` that was already validated upstream) may throw.
 
 ## Boundary Map
 
@@ -17,7 +17,7 @@ The **Domain Layer** (`src/*/domain/`) is the heart of the application. It must 
 | :--- | :--- | :--- |
 | **Presentation** | HTTP/CLI entry points, Request/Response mapping | Application, Domain, Generated Schemas |
 | **Application** | Orchestration, Use Cases, Transaction management | Domain, Infrastructure Interfaces |
-| **Domain** | Business Logic, Entities, Value Objects | None (Pure TS) |
+| **Domain** | Business Logic, Entities, Value Objects | Generated *types* (compile-time only), `Result` helpers |
 | **Infrastructure** | Persistence, External APIs, Adapters | Domain, External SDKs |
 
 ## Data Transformation (Mappers)
@@ -33,13 +33,16 @@ const pokemon = Pokemon.load(dto);
 ```
 
 ### 2. Outbound (Domain -> Presentation)
-Domain entities should have a `.toDto()` or `.toJSON()` method to provide a clean, plain object representation for the presentation layer.
+Domain entities expose a `.toDto()` method that returns a clean, plain object (`PokemonVariant`). The **Application layer** performs this boundary transformation, so its `Result` already carries a DTO — the controller just returns the success value.
 
 ```typescript
-// In Controller
-const result = await this.query.handle(id);
+// In Command/Query (Application layer)
+return Promise.resolve(R.succeed(entity.toDto())); // Boundary transformation
+
+// In Controller (Presentation layer)
+const result = await this.query.get(id);
 return match(result)
-  .with({ type: 'Success' }, ({ value }) => value.toDto()) // Boundary transformation
+  .with({ type: 'Success' }, ({ value }) => value)
   .with({ type: 'Failure' }, handleErrors)
   .exhaustive();
 ```

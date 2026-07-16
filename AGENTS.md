@@ -5,8 +5,7 @@ This repository contains instructions for AI agents (like Gemini, Claude, or Git
 ## Documentation
 
 - [AGENTS.md](./AGENTS.md): Core project instructions and conventions.
-- [docs/patterns/boundaries.md](./docs/patterns/boundaries.md): Detailed architectural boundary rules (Domain Purity, Mappers, etc.).
-- [.agents/README.md](./.agents/README.md): Information about agent-specific tooling and skills.
+- [docs/patterns/boundaries.md](./docs/patterns/boundaries.md): Detailed architectural boundary rules (layer dependencies, mappers, error boundaries).
 
 ## Core Philosophy
 
