@@ -5,7 +5,7 @@ export default defineConfig({
   input: './tsp-output/openapi.yaml',
   output: {
     path: './src/generated',
-    postProcess: ['eslint', 'prettier'],
+    postProcess: ['oxlint', 'prettier'],
   },
   plugins: ['nestjs', '@hey-api/sdk', 'zod'],
 });
