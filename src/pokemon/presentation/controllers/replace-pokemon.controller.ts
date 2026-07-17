@@ -1,19 +1,12 @@
-import {
-  Body,
-  Controller,
-  NotFoundException,
-  Param,
-  Put,
-} from '@nestjs/common';
-import { match } from 'ts-pattern';
+import { Body, Controller, Param, Put } from '@nestjs/common';
 import type { PokedexControllerMethods } from '../../../generated/nestjs.gen.js';
 import type { ReplacePokemonData } from '../../../generated/types.gen.js';
 import {
   zReplacePokemonBody,
   zReplacePokemonPath,
 } from '../../../generated/zod.gen.js';
-import { ZodPipe } from '../../../zod.pipe.js';
 import { ReplacePokemonCommand } from '../../application/commands/replace-pokemon.command.js';
+import { respond } from '../respond.js';
 
 @Controller('pokemon')
 export class ReplacePokemonController implements Pick<
@@ -24,16 +17,9 @@ export class ReplacePokemonController implements Pick<
 
   @Put(':id')
   async replacePokemon(
-    @Param(new ZodPipe(zReplacePokemonPath)) path: ReplacePokemonData['path'],
-    @Body(new ZodPipe(zReplacePokemonBody)) body: ReplacePokemonData['body'],
+    @Param({ schema: zReplacePokemonPath }) path: ReplacePokemonData['path'],
+    @Body({ schema: zReplacePokemonBody }) body: ReplacePokemonData['body'],
   ) {
-    const result = await this.command.handle(path.id, body);
-
-    return match(result)
-      .with({ type: 'Success' }, ({ value }) => value)
-      .with({ type: 'Failure' }, () => {
-        throw new NotFoundException(`Pokemon with id ${path.id} not found`);
-      })
-      .exhaustive();
+    return respond(await this.command.handle(path.id, body));
   }
 }

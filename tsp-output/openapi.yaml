@@ -174,10 +174,7 @@ paths:
           required: true
           description: National Pokedex number.
           schema:
-            type: integer
-            format: int32
-            minimum: 1
-            maximum: 1025
+            $ref: '#/components/schemas/pokedexNumber'
       responses:
         '200':
           description: The request has succeeded.
@@ -204,8 +201,7 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
-            format: int32
+            $ref: '#/components/schemas/pokedexNumber'
       responses:
         '200':
           description: The request has succeeded.
@@ -238,8 +234,7 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
-            format: int32
+            $ref: '#/components/schemas/pokedexNumber'
       responses:
         '204':
           description: There is no content to send for this request, but the headers may be useful.
@@ -377,17 +372,21 @@ components:
         primaryType:
           $ref: '#/components/schemas/PokemonType'
         secondaryType:
-          $ref: '#/components/schemas/PokemonType'
+          allOf:
+            - $ref: '#/components/schemas/PokemonType'
+          description: Secondary elemental type, if any. Must differ from `primaryType`.
         baseStats:
           $ref: '#/components/schemas/PokemonBaseStats'
         heightMetres:
           type: number
           format: float
           minimum: 0
+          exclusiveMinimum: true
         weightKg:
           type: number
           format: float
           minimum: 0
+          exclusiveMinimum: true
         isObtainable:
           type: boolean
         classification:
@@ -540,10 +539,8 @@ components:
         - classification
       properties:
         id:
-          type: integer
-          format: int32
-          minimum: 1
-          maximum: 1025
+          allOf:
+            - $ref: '#/components/schemas/pokedexNumber'
           description: National Pokedex number (e.g. 1 for Bulbasaur).
         name:
           type: string
@@ -557,7 +554,7 @@ components:
         secondaryType:
           allOf:
             - $ref: '#/components/schemas/PokemonType'
-          description: Secondary elemental type, if any.
+          description: Secondary elemental type, if any. Must differ from `primaryType`.
         baseStats:
           allOf:
             - $ref: '#/components/schemas/PokemonBaseStats'
@@ -565,13 +562,15 @@ components:
         heightMetres:
           type: number
           format: float
-          minimum: 0
           description: Height in metres.
+          minimum: 0
+          exclusiveMinimum: true
         weightKg:
           type: number
           format: float
-          minimum: 0
           description: Weight in kilograms.
+          minimum: 0
+          exclusiveMinimum: true
         isObtainable:
           type: boolean
           description: Whether this Pokemon appears in the wild in main series games.
@@ -606,23 +605,17 @@ components:
         - speed
       properties:
         hp:
-          type: integer
-          format: int32
+          $ref: '#/components/schemas/baseStat'
         attack:
-          type: integer
-          format: int32
+          $ref: '#/components/schemas/baseStat'
         defense:
-          type: integer
-          format: int32
+          $ref: '#/components/schemas/baseStat'
         specialAttack:
-          type: integer
-          format: int32
+          $ref: '#/components/schemas/baseStat'
         specialDefense:
-          type: integer
-          format: int32
+          $ref: '#/components/schemas/baseStat'
         speed:
-          type: integer
-          format: int32
+          $ref: '#/components/schemas/baseStat'
       description: Six base stats shared by every Pokemon.
     PokemonClassification:
       type: string
@@ -680,22 +673,37 @@ components:
         primaryType:
           $ref: '#/components/schemas/PokemonType'
         secondaryType:
-          $ref: '#/components/schemas/PokemonType'
+          allOf:
+            - $ref: '#/components/schemas/PokemonType'
+          description: Secondary elemental type, if any. Must differ from `primaryType`.
         baseStats:
           $ref: '#/components/schemas/PokemonBaseStats'
         heightMetres:
           type: number
           format: float
           minimum: 0
+          exclusiveMinimum: true
         weightKg:
           type: number
           format: float
           minimum: 0
+          exclusiveMinimum: true
         isObtainable:
           type: boolean
         classification:
           $ref: '#/components/schemas/PokemonClassification'
       description: Payload for fully replacing an existing Pokemon entry.
+    baseStat:
+      type: integer
+      format: int32
+      minimum: 0
+      description: A single non-negative base stat value.
+    pokedexNumber:
+      type: integer
+      format: int32
+      minimum: 1
+      maximum: 1025
+      description: National Pokedex number (e.g. 1 for Bulbasaur).
 servers:
   - url: http://localhost:3000
     description: Local development server

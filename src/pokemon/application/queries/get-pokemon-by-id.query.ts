@@ -13,16 +13,10 @@ export class GetPokemonByIdQuery {
     private readonly repository: IPokemonRepository,
   ) {}
 
-  get(
-    idValue: number,
-  ): Result.ResultAsync<PokemonVariant, PokemonNotFoundError> {
-    const id = PokemonId.create(idValue);
-    const pokemonEntity = this.repository.findById(id);
-
-    return Promise.resolve(
-      pokemonEntity
-        ? R.succeed(pokemonEntity.toDto())
-        : R.fail(new PokemonNotFoundError()),
+  get(idValue: number): Result.ResultAsync<PokemonVariant, PokemonNotFoundError> {
+    return R.pipe(
+      this.repository.findById(PokemonId.of(idValue)),
+      R.map((pokemon) => pokemon.toDto()),
     );
   }
 }

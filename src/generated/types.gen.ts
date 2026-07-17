@@ -42,6 +42,9 @@ export type ComponentHealth = {
 export type CreatePokemonRequest = {
   name: string;
   primaryType: PokemonType;
+  /**
+   * Secondary elemental type, if any. Must differ from `primaryType`.
+   */
   secondaryType?: PokemonType;
   baseStats: PokemonBaseStats;
   heightMetres: number;
@@ -161,7 +164,7 @@ export type Pokemon = {
   /**
    * National Pokedex number (e.g. 1 for Bulbasaur).
    */
-  id: number;
+  id: PokedexNumber;
   /**
    * Species name in lowercase (e.g. "bulbasaur").
    */
@@ -171,7 +174,7 @@ export type Pokemon = {
    */
   primaryType: PokemonType;
   /**
-   * Secondary elemental type, if any.
+   * Secondary elemental type, if any. Must differ from `primaryType`.
    */
   secondaryType?: PokemonType;
   /**
@@ -208,12 +211,12 @@ export type Pokemon = {
  * Six base stats shared by every Pokemon.
  */
 export type PokemonBaseStats = {
-  hp: number;
-  attack: number;
-  defense: number;
-  specialAttack: number;
-  specialDefense: number;
-  speed: number;
+  hp: BaseStat;
+  attack: BaseStat;
+  defense: BaseStat;
+  specialAttack: BaseStat;
+  specialDefense: BaseStat;
+  speed: BaseStat;
 };
 
 /**
@@ -257,6 +260,9 @@ export type PokemonVariant = NormalPokemon | LegendaryPokemon | MythicalPokemon;
 export type UpdatePokemonRequest = {
   name: string;
   primaryType: PokemonType;
+  /**
+   * Secondary elemental type, if any. Must differ from `primaryType`.
+   */
   secondaryType?: PokemonType;
   baseStats: PokemonBaseStats;
   heightMetres: number;
@@ -264,6 +270,16 @@ export type UpdatePokemonRequest = {
   isObtainable: boolean;
   classification: PokemonClassification;
 };
+
+/**
+ * A single non-negative base stat value.
+ */
+export type BaseStat = number;
+
+/**
+ * National Pokedex number (e.g. 1 for Bulbasaur).
+ */
+export type PokedexNumber = number;
 
 /**
  * Filter by classification.
@@ -481,7 +497,7 @@ export type CreatePokemonResponse =
 export type DeletePokemonData = {
   body?: never;
   path: {
-    id: number;
+    id: PokedexNumber;
   };
   query?: never;
   url: '/pokemon/{id}';
@@ -516,7 +532,7 @@ export type GetPokemonByIdData = {
     /**
      * National Pokedex number.
      */
-    id: number;
+    id: PokedexNumber;
   };
   query?: never;
   url: '/pokemon/{id}';
@@ -549,7 +565,7 @@ export type GetPokemonByIdResponse =
 export type ReplacePokemonData = {
   body: UpdatePokemonRequest;
   path: {
-    id: number;
+    id: PokedexNumber;
   };
   query?: never;
   url: '/pokemon/{id}';

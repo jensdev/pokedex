@@ -1,89 +1,60 @@
-import { Pokemon } from '../../domain/pokemon.entity.js';
 import { Inject, Injectable } from '@nestjs/common';
 import { R, Result } from '@praha/byethrow';
-import { match } from 'ts-pattern';
 import type {
   PokemonVariant,
   UpdatePokemonRequest,
 } from '../../../generated/types.gen.js';
-import { PokemonNotFoundError } from '../../domain/pokemon.errors.js';
+import {
+  InvalidPokemonAttributeError,
+  InvalidPokemonAttributesError,
+  PokemonNotFoundError,
+} from '../../domain/pokemon.errors.js';
 import type { IPokemonRepository } from '../../domain/pokemon.repository.interface.js';
 import { POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
+import { CLOCK_TOKEN, type Clock } from '../../domain/clock.js';
+import {
+  EVENT_PUBLISHER_TOKEN,
+  type IEventPublisher,
+} from '../../domain/event-publisher.js';
 import { PokemonId } from '../../domain/value-objects.js';
+import { toPokemonAttributes } from '../pokemon-attributes.mapper.js';
 
 @Injectable()
 export class ReplacePokemonCommand {
   constructor(
     @Inject(POKEMON_REPOSITORY_TOKEN)
     private readonly repository: IPokemonRepository,
+    @Inject(CLOCK_TOKEN)
+    private readonly clock: Clock,
+    @Inject(EVENT_PUBLISHER_TOKEN)
+    private readonly publisher: IEventPublisher,
   ) {}
 
   handle(
     idValue: number,
     body: UpdatePokemonRequest,
-  ): Result.ResultAsync<PokemonVariant, PokemonNotFoundError> {
-    const id = PokemonId.create(idValue);
-    const existingEntity = this.repository.findById(id);
-
-    if (!existingEntity) {
-      return Promise.resolve(R.fail(new PokemonNotFoundError()));
-    }
-
-    const existing = existingEntity.toDto();
-
-    const now = new Date().toISOString();
-    const base = {
-      id: existing.id,
-      name: body.name,
-      primaryType: body.primaryType,
-      secondaryType: body.secondaryType,
-      baseStats: body.baseStats,
-      heightMetres: body.heightMetres,
-      weightKg: body.weightKg,
-      isObtainable: body.isObtainable,
-      createdAt: existing.createdAt,
-      updatedAt: now,
-    };
-
-    const pokemon: PokemonVariant = match(body.classification)
-      .with('legendary', (classification) => ({
-        ...base,
-        classification,
-        legendaryGroup:
-          existing.classification === 'legendary'
-            ? existing.legendaryGroup
-            : 'Unknown',
-        isBoxLegendary:
-          existing.classification === 'legendary'
-            ? existing.isBoxLegendary
-            : false,
-      }))
-      .with('mythical', (classification) => ({
-        ...base,
-        classification,
-        distributionMethod:
-          existing.classification === 'mythical'
-            ? existing.distributionMethod
-            : 'Unknown',
-        isCurrentlyDistributed:
-          existing.classification === 'mythical'
-            ? existing.isCurrentlyDistributed
-            : false,
-        loreDescription:
-          existing.classification === 'mythical'
-            ? existing.loreDescription
-            : 'A newly discovered Mythical Pokemon.',
-      }))
-      .with('normal', (classification) => ({
-        ...base,
-        classification,
-        encounterRate: 50,
-      }))
-      .exhaustive();
-
-    const updatedEntity = Pokemon.load(pokemon);
-
-    this.repository.save(updatedEntity);
-    return Promise.resolve(R.succeed(updatedEntity.toDto()));
+  ): Result.ResultAsync<
+    PokemonVariant,
+    | PokemonNotFoundError
+    | InvalidPokemonAttributesError
+    | InvalidPokemonAttributeError
+  > {
+    return R.pipe(
+      R.do(),
+      R.bind('existing', () =>
+        this.repository.findById(PokemonId.of(idValue)),
+      ),
+      R.bind('attributes', () => toPokemonAttributes(body)),
+      R.andThen(({ existing, attributes }) =>
+        existing.replace(attributes, this.clock.now()),
+      ),
+      R.andThrough((updated) => this.repository.save(updated)),
+      // Events go out only after persistence succeeded.
+      R.andThrough((updated) => {
+        this.publisher.publish(updated.pullEvents());
+        return R.succeed();
+      }),
+      R.map((updated) => updated.toDto()),
+    );
   }
 }

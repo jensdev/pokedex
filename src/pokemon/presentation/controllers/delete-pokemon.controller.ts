@@ -1,16 +1,9 @@
-import {
-  Controller,
-  Delete,
-  HttpCode,
-  NotFoundException,
-  Param,
-} from '@nestjs/common';
-import { match } from 'ts-pattern';
+import { Controller, Delete, HttpCode, Param } from '@nestjs/common';
 import type { PokedexControllerMethods } from '../../../generated/nestjs.gen.js';
 import type { DeletePokemonData } from '../../../generated/types.gen.js';
 import { zDeletePokemonPath } from '../../../generated/zod.gen.js';
-import { ZodPipe } from '../../../zod.pipe.js';
 import { DeletePokemonCommand } from '../../application/commands/delete-pokemon.command.js';
+import { respond } from '../respond.js';
 
 @Controller('pokemon')
 export class DeletePokemonController implements Pick<
@@ -22,15 +15,8 @@ export class DeletePokemonController implements Pick<
   @Delete(':id')
   @HttpCode(204)
   async deletePokemon(
-    @Param(new ZodPipe(zDeletePokemonPath)) path: DeletePokemonData['path'],
+    @Param({ schema: zDeletePokemonPath }) path: DeletePokemonData['path'],
   ) {
-    const result = await this.command.handle(path.id);
-
-    match(result)
-      .with({ type: 'Success' }, () => {})
-      .with({ type: 'Failure' }, () => {
-        throw new NotFoundException(`Pokemon with id ${path.id} not found`);
-      })
-      .exhaustive();
+    respond(await this.command.handle(path.id));
   }
 }
