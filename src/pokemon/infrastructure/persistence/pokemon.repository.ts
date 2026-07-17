@@ -5,7 +5,10 @@ import { zPokemonVariant } from '../../../generated/zod.gen.js';
 import type { PokemonVariant } from '../../../generated/types.gen.js';
 import { rawPokemon } from '../pokemon.constants.js';
 import { Pokemon } from '../../domain/pokemon.entity.js';
-import { PokemonDataParseError } from '../../domain/pokemon.errors.js';
+import {
+  PokemonDataParseError,
+  PokemonNotFoundError,
+} from '../../domain/pokemon.errors.js';
 import { IPokemonRepository } from '../../domain/pokemon.repository.interface.js';
 import { PokemonId } from '../../domain/value-objects.js';
 
@@ -38,31 +41,43 @@ export class PokemonRepository implements IPokemonRepository {
     );
   }
 
-  async findById(id: PokemonId): Promise<Pokemon | undefined> {
-    const item = this.pokemon.find((item) => item.id === id.value);
-    return item ? Pokemon.load(item) : undefined;
+  async findById(
+    id: PokemonId,
+  ): Result.ResultAsync<Pokemon, PokemonNotFoundError> {
+    const item = this.pokemon.find((item) => item.id === id);
+    return item
+      ? R.succeed(Pokemon.load(structuredClone(item)))
+      : R.fail(new PokemonNotFoundError({ id }));
   }
 
-  async nextId(): Promise<PokemonId> {
+  async nextId(): Result.ResultAsync<PokemonId, never> {
     const id = this.nextIdValue;
     this.nextIdValue += 1;
-    return PokemonId.create(id);
+    return R.succeed(PokemonId.of(id));
   }
 
-  async save(pokemon: Pokemon): Promise<void> {
-    const dto = pokemon.toDto();
+  /**
+   * Entities are cloned at this boundary (here and in `findById`), so the
+   * store, the entity, and any response body never alias the same object —
+   * immutability by construction instead of by convention.
+   */
+  async save(pokemon: Pokemon): Result.ResultAsync<void, never> {
+    const dto = structuredClone(pokemon.toDto());
     const index = this.pokemon.findIndex((p) => p.id === dto.id);
     if (index === -1) {
       this.pokemon.push(dto);
     } else {
       this.pokemon[index] = dto;
     }
+    return R.succeed();
   }
 
-  async remove(id: PokemonId): Promise<void> {
-    const index = this.pokemon.findIndex((p) => p.id === id.value);
-    if (index !== -1) {
-      this.pokemon.splice(index, 1);
+  async remove(id: PokemonId): Result.ResultAsync<void, PokemonNotFoundError> {
+    const index = this.pokemon.findIndex((p) => p.id === id);
+    if (index === -1) {
+      return R.fail(new PokemonNotFoundError({ id }));
     }
+    this.pokemon.splice(index, 1);
+    return R.succeed();
   }
 }

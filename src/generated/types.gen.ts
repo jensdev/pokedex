@@ -42,6 +42,9 @@ export type ComponentHealth = {
 export type CreatePokemonRequest = {
   name: string;
   primaryType: PokemonType;
+  /**
+   * Secondary elemental type, if any. Must differ from `primaryType`.
+   */
   secondaryType?: PokemonType;
   baseStats: PokemonBaseStats;
   heightMetres: number;
@@ -171,7 +174,7 @@ export type Pokemon = {
    */
   primaryType: PokemonType;
   /**
-   * Secondary elemental type, if any.
+   * Secondary elemental type, if any. Must differ from `primaryType`.
    */
   secondaryType?: PokemonType;
   /**
@@ -208,12 +211,12 @@ export type Pokemon = {
  * Six base stats shared by every Pokemon.
  */
 export type PokemonBaseStats = {
-  hp: number;
-  attack: number;
-  defense: number;
-  specialAttack: number;
-  specialDefense: number;
-  speed: number;
+  hp: BaseStat;
+  attack: BaseStat;
+  defense: BaseStat;
+  specialAttack: BaseStat;
+  specialDefense: BaseStat;
+  speed: BaseStat;
 };
 
 /**
@@ -257,6 +260,9 @@ export type PokemonVariant = NormalPokemon | LegendaryPokemon | MythicalPokemon;
 export type UpdatePokemonRequest = {
   name: string;
   primaryType: PokemonType;
+  /**
+   * Secondary elemental type, if any. Must differ from `primaryType`.
+   */
   secondaryType?: PokemonType;
   baseStats: PokemonBaseStats;
   heightMetres: number;
@@ -264,6 +270,11 @@ export type UpdatePokemonRequest = {
   isObtainable: boolean;
   classification: PokemonClassification;
 };
+
+/**
+ * A single non-negative base stat value.
+ */
+export type BaseStat = number;
 
 /**
  * National Pokedex number (e.g. 1 for Bulbasaur).

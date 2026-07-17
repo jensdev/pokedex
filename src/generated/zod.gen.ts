@@ -56,60 +56,6 @@ export const zLivenessResponse = z.object({
 });
 
 /**
- * Six base stats shared by every Pokemon.
- */
-export const zPokemonBaseStats = z.object({
-  hp: z.coerce
-    .number()
-    .min(-2147483648, {
-      error: 'Invalid value: Expected int32 to be >= -2147483648',
-    })
-    .max(2147483647, {
-      error: 'Invalid value: Expected int32 to be <= 2147483647',
-    }),
-  attack: z.coerce
-    .number()
-    .min(-2147483648, {
-      error: 'Invalid value: Expected int32 to be >= -2147483648',
-    })
-    .max(2147483647, {
-      error: 'Invalid value: Expected int32 to be <= 2147483647',
-    }),
-  defense: z.coerce
-    .number()
-    .min(-2147483648, {
-      error: 'Invalid value: Expected int32 to be >= -2147483648',
-    })
-    .max(2147483647, {
-      error: 'Invalid value: Expected int32 to be <= 2147483647',
-    }),
-  specialAttack: z.coerce
-    .number()
-    .min(-2147483648, {
-      error: 'Invalid value: Expected int32 to be >= -2147483648',
-    })
-    .max(2147483647, {
-      error: 'Invalid value: Expected int32 to be <= 2147483647',
-    }),
-  specialDefense: z.coerce
-    .number()
-    .min(-2147483648, {
-      error: 'Invalid value: Expected int32 to be >= -2147483648',
-    })
-    .max(2147483647, {
-      error: 'Invalid value: Expected int32 to be <= 2147483647',
-    }),
-  speed: z.coerce
-    .number()
-    .min(-2147483648, {
-      error: 'Invalid value: Expected int32 to be >= -2147483648',
-    })
-    .max(2147483647, {
-      error: 'Invalid value: Expected int32 to be <= 2147483647',
-    }),
-});
-
-/**
  * Pokemon classification used when creating or filtering Pokemon.
  */
 export const zPokemonClassification = z.enum([
@@ -143,6 +89,28 @@ export const zPokemonType = z.enum([
 ]);
 
 /**
+ * A single non-negative base stat value.
+ */
+export const zBaseStat = z.coerce
+  .number()
+  .gte(0)
+  .max(2147483647, {
+    error: 'Invalid value: Expected int32 to be <= 2147483647',
+  });
+
+/**
+ * Six base stats shared by every Pokemon.
+ */
+export const zPokemonBaseStats = z.object({
+  hp: zBaseStat,
+  attack: zBaseStat,
+  defense: zBaseStat,
+  specialAttack: zBaseStat,
+  specialDefense: zBaseStat,
+  speed: zBaseStat,
+});
+
+/**
  * Payload for creating a new Pokemon entry.
  */
 export const zCreatePokemonRequest = z.object({
@@ -150,8 +118,8 @@ export const zCreatePokemonRequest = z.object({
   primaryType: zPokemonType,
   secondaryType: zPokemonType.optional(),
   baseStats: zPokemonBaseStats,
-  heightMetres: z.coerce.number().gte(0),
-  weightKg: z.coerce.number().gte(0),
+  heightMetres: z.coerce.number().gt(0),
+  weightKg: z.coerce.number().gt(0),
   isObtainable: z.boolean(),
   classification: zPokemonClassification,
 });
@@ -164,8 +132,8 @@ export const zUpdatePokemonRequest = z.object({
   primaryType: zPokemonType,
   secondaryType: zPokemonType.optional(),
   baseStats: zPokemonBaseStats,
-  heightMetres: z.coerce.number().gte(0),
-  weightKg: z.coerce.number().gte(0),
+  heightMetres: z.coerce.number().gt(0),
+  weightKg: z.coerce.number().gt(0),
   isObtainable: z.boolean(),
   classification: zPokemonClassification,
 });
@@ -185,8 +153,8 @@ export const zPokemon = z.object({
   primaryType: zPokemonType,
   secondaryType: zPokemonType.optional(),
   baseStats: zPokemonBaseStats,
-  heightMetres: z.coerce.number().gte(0),
-  weightKg: z.coerce.number().gte(0),
+  heightMetres: z.coerce.number().gt(0),
+  weightKg: z.coerce.number().gt(0),
   isObtainable: z.boolean(),
   createdAt: z.iso.datetime(),
   updatedAt: z.iso.datetime(),

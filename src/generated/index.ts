@@ -2,6 +2,7 @@
 
 export type {
   ApiError,
+  BaseStat,
   ClientOptions,
   ComponentHealth,
   CreatePokemonData,

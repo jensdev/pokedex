@@ -6,22 +6,28 @@ import type {
 } from '../../../generated/types.gen.js';
 import {
   InvalidPokemonAttributeError,
+  InvalidPokemonAttributesError,
   PokemonNotFoundError,
 } from '../../domain/pokemon.errors.js';
 import type { IPokemonRepository } from '../../domain/pokemon.repository.interface.js';
 import { POKEMON_REPOSITORY_TOKEN } from '../../domain/pokemon.repository.interface.js';
+import { CLOCK_TOKEN, type Clock } from '../../domain/clock.js';
 import {
-  Height,
-  PokemonId,
-  Stats,
-  Weight,
-} from '../../domain/value-objects.js';
+  EVENT_PUBLISHER_TOKEN,
+  type IEventPublisher,
+} from '../../domain/event-publisher.js';
+import { PokemonId } from '../../domain/value-objects.js';
+import { toPokemonAttributes } from '../pokemon-attributes.mapper.js';
 
 @Injectable()
 export class ReplacePokemonCommand {
   constructor(
     @Inject(POKEMON_REPOSITORY_TOKEN)
     private readonly repository: IPokemonRepository,
+    @Inject(CLOCK_TOKEN)
+    private readonly clock: Clock,
+    @Inject(EVENT_PUBLISHER_TOKEN)
+    private readonly publisher: IEventPublisher,
   ) {}
 
   handle(
@@ -29,33 +35,23 @@ export class ReplacePokemonCommand {
     body: UpdatePokemonRequest,
   ): Result.ResultAsync<
     PokemonVariant,
-    PokemonNotFoundError | InvalidPokemonAttributeError
+    | PokemonNotFoundError
+    | InvalidPokemonAttributesError
+    | InvalidPokemonAttributeError
   > {
     return R.pipe(
       R.do(),
-      R.bind('existing', async () => {
-        const existing = await this.repository.findById(
-          PokemonId.create(idValue),
-        );
-        return existing
-          ? R.succeed(existing)
-          : R.fail(new PokemonNotFoundError({ id: idValue }));
-      }),
-      R.bind('baseStats', () => Stats.create(body.baseStats)),
-      R.bind('heightMetres', () => Height.create(body.heightMetres)),
-      R.bind('weightKg', () => Weight.create(body.weightKg)),
-      R.map(({ existing, ...valueObjects }) =>
-        existing.replace({
-          name: body.name,
-          primaryType: body.primaryType,
-          secondaryType: body.secondaryType,
-          isObtainable: body.isObtainable,
-          classification: body.classification,
-          ...valueObjects,
-        }),
+      R.bind('existing', () =>
+        this.repository.findById(PokemonId.of(idValue)),
       ),
-      R.andThrough(async (updated) => {
-        await this.repository.save(updated);
+      R.bind('attributes', () => toPokemonAttributes(body)),
+      R.andThen(({ existing, attributes }) =>
+        existing.replace(attributes, this.clock.now()),
+      ),
+      R.andThrough((updated) => this.repository.save(updated)),
+      // Events go out only after persistence succeeded.
+      R.andThrough((updated) => {
+        this.publisher.publish(updated.pullEvents());
         return R.succeed();
       }),
       R.map((updated) => updated.toDto()),

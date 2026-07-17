@@ -22,7 +22,7 @@ describe('PokemonRepository', () => {
 
     const pokemon = R.unwrap(result);
     expect(pokemon.length).toBeGreaterThan(0);
-    expect(pokemon[0]?.id.value).toBeGreaterThanOrEqual(1);
+    expect(pokemon[0]?.id).toBeGreaterThanOrEqual(1);
   });
 
   it('findAll fails with PokemonDataParseError when the source is malformed', async () => {
@@ -37,10 +37,10 @@ describe('PokemonRepository', () => {
   it('nextId continues after the highest seeded id', async () => {
     const repository = new PokemonRepository();
     const seeded = R.unwrap(await repository.findAll());
-    const maxSeededId = Math.max(...seeded.map((p) => p.id.value));
+    const maxSeededId = Math.max(...seeded.map((p) => p.id));
 
-    const next = await repository.nextId();
+    const next = R.unwrap(await repository.nextId());
 
-    expect(next.value).toBe(maxSeededId + 1);
+    expect(next).toBe(maxSeededId + 1);
   });
 });

@@ -1,3 +1,4 @@
+import { R, Result } from '@praha/byethrow';
 import { match } from 'ts-pattern';
 import type {
   PokemonBaseStats,
@@ -5,9 +6,22 @@ import type {
   PokemonType,
   PokemonClassification,
 } from '../../generated/types.gen.js';
+import { InvalidPokemonAttributeError } from './pokemon.errors.js';
+import {
+  PokemonCreatedEvent,
+  PokemonEvent,
+  PokemonReplacedEvent,
+} from './pokemon.events.js';
 import { Stats, Height, Weight, PokemonId } from './value-objects.js';
 
-/** Mutable attributes shared by create and replace. */
+/**
+ * Mutable attributes shared by create and replace.
+ *
+ * `name` is deliberately a contract-validated primitive rather than a value
+ * object: the generated schema already enforces its only rules (non-empty,
+ * max length) and the domain attaches no behaviour to it. Value objects are
+ * reserved for attributes that carry domain invariants of their own.
+ */
 export interface PokemonAttributes {
   name: string;
   primaryType: PokemonType;
@@ -37,15 +51,47 @@ interface PokemonCommonState {
   updatedAt: string;
 }
 
+/**
+ * Timestamps are passed in (see the `Clock` port) rather than read from
+ * `new Date()`, so the entity is a pure function of its inputs.
+ */
 export class Pokemon {
-  private constructor(private readonly state: PokemonVariant) {}
+  /** Identity as a value object, constructed once at (re)hydration time. */
+  readonly id: PokemonId;
 
-  static create(props: CreatePokemonProps): Pokemon {
-    const now = new Date().toISOString();
-    return new Pokemon(
-      Pokemon.withClassification(
-        Pokemon.toCommonState(props, props.id.value, now, now),
-        props.classification,
+  private constructor(
+    private readonly state: Readonly<PokemonVariant>,
+    private events: readonly PokemonEvent[] = [],
+  ) {
+    this.id = PokemonId.of(state.id);
+  }
+
+  /**
+   * Drains the events recorded since this instance was constructed. Draining
+   * (rather than reading) makes double-publishing impossible: the command
+   * pulls exactly once, after persistence succeeds.
+   */
+  pullEvents(): readonly PokemonEvent[] {
+    const events = this.events;
+    this.events = [];
+    return events;
+  }
+
+  static create(
+    props: CreatePokemonProps,
+    now: string,
+  ): Result.Result<Pokemon, InvalidPokemonAttributeError> {
+    return R.pipe(
+      Pokemon.ensureDistinctTypes(props),
+      R.map(
+        () =>
+          new Pokemon(
+            Pokemon.withClassification(
+              Pokemon.toCommonState(props, props.id, now, now),
+              props.classification,
+            ),
+            [new PokemonCreatedEvent(props.id, props.name, now)],
+          ),
       ),
     );
   }
@@ -61,28 +107,55 @@ export class Pokemon {
    * are carried over when the classification is unchanged, otherwise reset to
    * sensible defaults.
    */
-  replace(attributes: PokemonAttributes): Pokemon {
-    return new Pokemon(
-      Pokemon.withClassification(
-        Pokemon.toCommonState(
-          attributes,
-          this.state.id,
-          this.state.createdAt,
-          new Date().toISOString(),
-        ),
-        attributes.classification,
-        this.state,
+  replace(
+    attributes: PokemonAttributes,
+    now: string,
+  ): Result.Result<Pokemon, InvalidPokemonAttributeError> {
+    return R.pipe(
+      Pokemon.ensureDistinctTypes(attributes),
+      R.map(
+        () =>
+          new Pokemon(
+            Pokemon.withClassification(
+              Pokemon.toCommonState(
+                attributes,
+                this.state.id,
+                this.state.createdAt,
+                now,
+              ),
+              attributes.classification,
+              this.state,
+            ),
+            [new PokemonReplacedEvent(this.id, attributes.name, now)],
+          ),
       ),
     );
-  }
-
-  get id(): PokemonId {
-    return PokemonId.create(this.state.id);
   }
 
   // Map back to the DTO for the repository/API response
   toDto(): PokemonVariant {
     return this.state;
+  }
+
+  /**
+   * Relationship invariant — it spans two attributes, so it belongs to the
+   * aggregate, not to a single value object. Field-level invariants (height,
+   * weight, stats) are enforced by the value objects themselves.
+   */
+  private static ensureDistinctTypes(
+    attributes: PokemonAttributes,
+  ): Result.Result<void, InvalidPokemonAttributeError> {
+    if (
+      attributes.secondaryType !== undefined &&
+      attributes.secondaryType === attributes.primaryType
+    ) {
+      return R.fail(
+        new InvalidPokemonAttributeError({
+          reason: 'Secondary type must differ from primary type.',
+        }),
+      );
+    }
+    return R.succeed();
   }
 
   private static toCommonState(
@@ -113,51 +186,39 @@ export class Pokemon {
   private static withClassification(
     base: PokemonCommonState,
     classification: PokemonClassification,
-    previous?: PokemonVariant,
+    previous?: Readonly<PokemonVariant>,
   ): PokemonVariant {
     return match(classification)
-      .with('legendary', (value) => ({
-        ...base,
-        classification: value,
-        legendaryGroup:
-          previous?.classification === 'legendary'
-            ? previous.legendaryGroup
-            : 'Unknown',
-        isBoxLegendary:
-          previous?.classification === 'legendary'
-            ? previous.isBoxLegendary
-            : false,
-        mascotForGames:
-          previous?.classification === 'legendary'
-            ? previous.mascotForGames
-            : undefined,
-      }))
-      .with('mythical', (value) => ({
-        ...base,
-        classification: value,
-        distributionMethod:
-          previous?.classification === 'mythical'
-            ? previous.distributionMethod
-            : 'Unknown',
-        isCurrentlyDistributed:
-          previous?.classification === 'mythical'
-            ? previous.isCurrentlyDistributed
-            : false,
-        loreDescription:
-          previous?.classification === 'mythical'
-            ? previous.loreDescription
-            : 'A newly discovered Mythical Pokemon.',
-      }))
-      .with('normal', (value) => ({
-        ...base,
-        classification: value,
-        encounterRate:
-          previous?.classification === 'normal' ? previous.encounterRate : 50,
-        evolvesInto:
-          previous?.classification === 'normal'
-            ? previous.evolvesInto
-            : undefined,
-      }))
+      .with('legendary', (value) => {
+        const prev = previous?.classification === value ? previous : undefined;
+        return {
+          ...base,
+          classification: value,
+          legendaryGroup: prev?.legendaryGroup ?? 'Unknown',
+          isBoxLegendary: prev?.isBoxLegendary ?? false,
+          mascotForGames: prev?.mascotForGames,
+        };
+      })
+      .with('mythical', (value) => {
+        const prev = previous?.classification === value ? previous : undefined;
+        return {
+          ...base,
+          classification: value,
+          distributionMethod: prev?.distributionMethod ?? 'Unknown',
+          isCurrentlyDistributed: prev?.isCurrentlyDistributed ?? false,
+          loreDescription:
+            prev?.loreDescription ?? 'A newly discovered Mythical Pokemon.',
+        };
+      })
+      .with('normal', (value) => {
+        const prev = previous?.classification === value ? previous : undefined;
+        return {
+          ...base,
+          classification: value,
+          encounterRate: prev?.encounterRate ?? 50,
+          evolvesInto: prev?.evolvesInto,
+        };
+      })
       .exhaustive();
   }
 }

@@ -38,14 +38,18 @@ enum PokemonType {
 @maxValue(1025)
 scalar pokedexNumber extends int32;
 
+/** A single non-negative base stat value. */
+@minValue(0)
+scalar baseStat extends int32;
+
 /** Six base stats shared by every Pokemon. */
 model PokemonBaseStats {
-  hp: int32;
-  attack: int32;
-  defense: int32;
-  specialAttack: int32;
-  specialDefense: int32;
-  speed: int32;
+  hp: baseStat;
+  attack: baseStat;
+  defense: baseStat;
+  specialAttack: baseStat;
+  specialDefense: baseStat;
+  speed: baseStat;
 }
 
 /**
@@ -65,18 +69,18 @@ model Pokemon {
   /** Primary elemental type. */
   primaryType: PokemonType;
 
-  /** Secondary elemental type, if any. */
+  /** Secondary elemental type, if any. Must differ from `primaryType`. */
   secondaryType?: PokemonType;
 
   /** Base stat block. */
   baseStats: PokemonBaseStats;
 
   /** Height in metres. */
-  @minValue(0)
+  @minValueExclusive(0)
   heightMetres: float32;
 
   /** Weight in kilograms. */
-  @minValue(0)
+  @minValueExclusive(0)
   weightKg: float32;
 
   /** Whether this Pokemon appears in the wild in main series games. */
@@ -157,13 +161,16 @@ model CreatePokemonRequest {
   name: string;
 
   primaryType: PokemonType;
+
+  /** Secondary elemental type, if any. Must differ from `primaryType`. */
   secondaryType?: PokemonType;
+
   baseStats: PokemonBaseStats;
 
-  @minValue(0)
+  @minValueExclusive(0)
   heightMetres: float32;
 
-  @minValue(0)
+  @minValueExclusive(0)
   weightKg: float32;
 
   isObtainable: boolean;

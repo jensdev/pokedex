@@ -1,4 +1,5 @@
 import { R, Result } from '@praha/byethrow';
+import * as z from 'zod';
 import type { PokemonBaseStats } from '../../generated/types.gen.js';
 import { InvalidPokemonAttributeError } from './pokemon.errors.js';
 
@@ -61,22 +62,24 @@ export class Weight {
 }
 
 /**
- * Identity invariant, not an expected business failure: `id` always originates
- * from a Zod-validated path param (`gte(1)`) or the repository's own counter,
- * so a non-positive value here signals a programming error. It therefore throws
- * rather than returning a `Result`.
+ * `PokemonId` is a branded primitive, not a class: it carries a constraint
+ * but no behaviour, so a zod brand gives nominal typing (a raw `number` is
+ * not assignable to `PokemonId`) with zero runtime wrapper — ids keep
+ * primitive ergonomics (`===`, arithmetic, JSON). Class value objects like
+ * `Stats` above are reserved for attributes that combine a constraint with
+ * behaviour. The schema is domain-owned: the contract's Pokedex cap
+ * (1..1025) stays a boundary concern.
  */
-export class PokemonId {
-  private constructor(public readonly value: number) {}
+const PokemonIdSchema = z.number().int().positive().brand<'PokemonId'>();
 
-  static create(id: number): PokemonId {
-    if (id <= 0) {
-      throw new Error('Pokemon ID must be greater than zero.');
-    }
-    return new PokemonId(id);
-  }
+export type PokemonId = z.infer<typeof PokemonIdSchema>;
 
-  equals(other: PokemonId): boolean {
-    return this.value === other.value;
-  }
-}
+export const PokemonId = {
+  /**
+   * Identity invariant, not an expected business failure: `id` always
+   * originates from a Zod-validated path param (`gte(1)`) or the repository's
+   * own counter, so a non-positive value here signals a programming error.
+   * It therefore throws (a defect) rather than returning a `Result`.
+   */
+  of: (value: number): PokemonId => PokemonIdSchema.parse(value),
+};

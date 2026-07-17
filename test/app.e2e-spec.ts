@@ -82,13 +82,27 @@ describe('App (e2e)', () => {
     expect(response.body.id).toBeGreaterThan(151); // after the highest seed id
   });
 
-  // Schema-valid but domain-invalid: negative stats pass Zod (int32 has no
-  // minimum) but the Stats value object rejects them -> typed 400, not a 500.
+  // Rejected at the contract boundary: the generated schema now enforces
+  // non-negative stats, so this never reaches the domain.
   it('POST /pokemon with negative stats returns a typed 400', () => {
     return request(app.getHttpServer())
       .post('/pokemon')
       .send({ ...validPokemon, baseStats: { ...validPokemon.baseStats, hp: -1 } })
       .expect(400);
+  });
+
+  // Schema-valid but domain-invalid: OpenAPI cannot express cross-field
+  // constraints, so the duplicate type passes Zod and is rejected by the
+  // aggregate's invariant -> typed 400 through the Result rail, not a 500.
+  it('POST /pokemon with secondaryType equal to primaryType returns a typed 400', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/pokemon')
+      .send({ ...validPokemon, secondaryType: validPokemon.primaryType })
+      .expect(400);
+
+    expect(response.body.message).toBe(
+      'Secondary type must differ from primary type.',
+    );
   });
 
   it('PUT /pokemon/:id replaces an existing Pokemon (200)', () => {

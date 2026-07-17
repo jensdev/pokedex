@@ -3,6 +3,10 @@ import { CreatePokemonCommand } from './application/commands/create-pokemon.comm
 import { DeletePokemonCommand } from './application/commands/delete-pokemon.command.js';
 import { ReplacePokemonCommand } from './application/commands/replace-pokemon.command.js';
 import { PokemonRepository } from './infrastructure/persistence/pokemon.repository.js';
+import { AuditLogEventPublisher } from './infrastructure/audit-log-event-publisher.js';
+import { SystemClock } from './infrastructure/system-clock.js';
+import { CLOCK_TOKEN } from './domain/clock.js';
+import { EVENT_PUBLISHER_TOKEN } from './domain/event-publisher.js';
 import { POKEMON_REPOSITORY_TOKEN } from './domain/pokemon.repository.interface.js';
 import { CreatePokemonController } from './presentation/controllers/create-pokemon.controller.js';
 import { DeletePokemonController } from './presentation/controllers/delete-pokemon.controller.js';
@@ -24,6 +28,14 @@ import { ListPokemonsQuery } from './application/queries/list-pokemons.query.js'
     {
       provide: POKEMON_REPOSITORY_TOKEN,
       useClass: PokemonRepository,
+    },
+    {
+      provide: CLOCK_TOKEN,
+      useClass: SystemClock,
+    },
+    {
+      provide: EVENT_PUBLISHER_TOKEN,
+      useClass: AuditLogEventPublisher,
     },
     ListPokemonsQuery,
     GetPokemonByIdQuery,
