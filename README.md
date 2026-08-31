@@ -1,46 +1,31 @@
-# Nest Pokemon
+# Effect Pokédex
 
-A **contract-first** NestJS Pokédex API built with [TypeSpec](https://typespec.io/), [OpenAPI](https://www.openapis.org/), and [@hey-api/openapi-ts](https://heyapi.dev/).
+A **contract-first** Pokédex API built with [TypeSpec](https://typespec.io/),
+[OpenAPI](https://www.openapis.org/), and [Effect 4.0](https://effect.website/).
 
-The API is defined in TypeSpec, compiled to an OpenAPI 3.0 spec, and then used to generate TypeScript types, Zod schemas, NestJS controller interfaces, and an SDK — keeping the implementation and documentation in sync by design.
+The API is defined in TypeSpec, compiled to an OpenAPI 3.0 spec, and then used to generate an
+Effect `HttpApi` contract (`HttpApiGroup` / `HttpApiEndpoint` definitions plus `Schema` models)
+— keeping the implementation and the documentation in sync by design.
 
-## Architecture
+> **Status: mid-migration.** This repository is being rewritten from NestJS 11 to Effect 4.0.
+> The NestJS implementation has been removed and the Effect implementation is landing phase by
+> phase, so **there is currently no runnable server** — `src/main.ts` is a placeholder. See
+> [docs/migration/](./docs/migration/) for the plan and
+> [docs/migration/05-phased-checklist.md](./docs/migration/05-phased-checklist.md) for what is
+> done and what comes next.
 
-This project follows a **Contract-First** approach combined with **Clean Architecture** principles.
+## Pipeline
 
-```mermaid
-graph TD
-    subgraph "Contract Layer"
-    TSP[TypeSpec Definitions] -->|tsp compile| OAS[OpenAPI 3.0 Spec]
-    OAS -->|openapi-ts| GEN[Generated Code]
-    end
-
-    subgraph "Application Layer"
-    GEN -->|implements| REQ[Request Controllers]
-    REQ -->|invokes| CQ[Commands/Queries]
-    CQ -->|uses| DOM[Domain Layer]
-    end
-
-    subgraph "Infrastructure Layer"
-    INF[Persistence/External] -.->|implements| POK_REP_INT[Repository Interface]
-    DOM --> POK_REP_INT
-    end
+```
+tsp/*.tsp ──tsp compile──▶ tsp-output/openapi.yaml ──openapigen (httpapi)──▶ src/generated/Api.ts
 ```
 
-### Key concepts
-
-| Concept                   | How it works                                                                                                                                                                     |
-| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Contract-first**        | The API contract is authored in TypeSpec (`tsp/`). All generated code derives from it.                                                                                           |
-| **Granular Controllers**  | Instead of monolithic controllers, each endpoint is handled by a "Request" class (e.g., `CreatePokemonRequest`) that implements a specific method from the generated interfaces. |
-| **Application Layer**     | Business logic is encapsulated in Commands and Queries, keeping the presentation layer (controllers) thin and focused on HTTP concerns.                                          |
-| **Runtime validation**    | A custom `ZodPipe` validates incoming request params/body against the generated Zod schemas.                                                                                     |
-| **Typed error handling**  | Services return `Result` types (`@praha/byethrow`) and use `@praha/error-factory` for domain-specific errors. Controllers pattern-match on results with `ts-pattern`.            |
+`src/generated/Api.ts` is **emitted, never hand-edited** — regenerate it with `npm run generate`.
 
 ## Project structure
 
 ```
-├── tsp/                    # TypeSpec definitions (The "Source of Truth")
+├── tsp/                    # TypeSpec definitions (the source of truth)
 │   ├── main.tsp            #   Service metadata & imports
 │   ├── health.tsp          #   Health-check endpoints
 │   ├── pokedex.tsp         #   Pokédex CRUD endpoints
@@ -48,66 +33,59 @@ graph TD
 ├── tsp-output/
 │   └── openapi.yaml        # Generated OpenAPI 3.0 spec
 ├── src/
-│   ├── generated/          # Auto-generated code (DO NOT EDIT)
-│   │   ├── types.gen.ts    #   TypeScript types
-│   │   ├── zod.gen.ts      #   Zod validation schemas
-│   │   ├── nestjs.gen.ts   #   NestJS controller interfaces
-│   │   └── sdk.gen.ts      #   API client SDK
-│   ├── pokemon/            # Pokemon module (Clean Architecture)
-│   │   ├── application/    #   Commands & Queries
-│   │   ├── domain/         #   Entities, Value Objects & Repository Interfaces
-│   │   ├── infrastructure/ #   Persistence (Repository implementation)
-│   │   ├── presentation/   #   Request Controllers
-│   │   └── pokemon.module.ts
-│   ├── health/             # Health module
-│   │   ├── queries/
-│   │   ├── requests/
-│   │   └── health.module.ts
-│   ├── zod.pipe.ts         # Generic ZodPipe for request validation
-│   ├── app.module.ts
-│   └── main.ts
+│   ├── generated/
+│   │   └── Api.ts          # Generated Effect HttpApi contract (DO NOT EDIT)
+│   └── main.ts             # Entry point (placeholder until Phase 3)
+├── docs/migration/         # NestJS → Effect migration plan & checklist
+├── repos/effect            # Vendored Effect source, used as the API reference
 ├── tspconfig.yaml          # TypeSpec compiler config
-└── tsconfig.json
+├── tsconfig.json           # Type-checking config
+├── tsconfig.build.json     # Build config (excludes tests)
+└── vitest.config.ts        # Test config
 ```
 
 ## Prerequisites
 
-- **Node.js** ≥ 18
+- **Node.js** ≥ 22
 - **npm**
 
-## Getting started
+## Commands
 
-```bash
-# Install dependencies
-npm install
+| Command                    | What it does                                                     |
+| -------------------------- | ---------------------------------------------------------------- |
+| `npm install`              | Install dependencies                                             |
+| `npm run generate`         | `typespec:compile` + `generate:api` — the full contract pipeline |
+| `npm run typespec:compile` | Compile `tsp/` into `tsp-output/openapi.yaml`                    |
+| `npm run generate:api`     | Generate `src/generated/Api.ts` from the OpenAPI spec            |
+| `npm run dev`              | Run `src/main.ts` in watch mode (`tsx`)                          |
+| `npm run build`            | Compile to `dist/`                                               |
+| `npm start`                | Run the compiled server (`node dist/main.js`)                    |
+| `npm run typecheck`        | `tsc --noEmit`                                                   |
+| `npm run test`             | Run the test suite (`vitest run`)                                |
+| `npm run check`            | `typecheck` + `test` — the gate every change must pass           |
 
-# Compile the TypeSpec definitions into an OpenAPI spec
-npm run typespec:compile
+After changing anything under `tsp/`, run `npm run generate` and commit the regenerated
+`tsp-output/openapi.yaml` and `src/generated/Api.ts`.
 
-# Generate types, schemas, and NestJS interfaces from the OpenAPI spec
-npx openapi-ts
+## Stack
 
-# Start the dev server (watch mode)
-npm run start:dev
-```
+| Library                                                                       | Purpose                                                  |
+| ----------------------------------------------------------------------------- | -------------------------------------------------------- |
+| [`effect`](https://effect.website/)                                           | Runtime, effect system, `Schema`, `Layer`, and `HttpApi` |
+| [`@effect/platform-node`](https://effect.website/docs/platform/introduction/) | Node HTTP server platform layer                          |
+| [`@typespec/compiler`](https://typespec.io/)                                  | API-first contract definition language                   |
+| [`@effect/openapi-generator`](https://github.com/Effect-TS/effect)            | Generates the Effect `HttpApi` contract from OpenAPI     |
+| [`@effect/vitest`](https://github.com/Effect-TS/effect)                       | Effect-aware test helpers on top of `vitest`             |
 
-The API will be available at **http://localhost:3000**.
+All `effect` packages are **pinned to an exact version** (`4.0.0-rc.112`) matching the vendored
+source in `repos/effect`. Bump the pins and the subtree together, then rerun
+`npm run generate && npm run check`.
 
 ## Agent instructions
 
 This repository is optimized for AI agents (Gemini, Claude, etc.).
-See [AGENTS.md](./AGENTS.md) and [GEMINI.md](./GEMINI.md) for architectural conventions, rules, and best practices for contributing to this codebase.
-
-## Notable libraries
-
-| Library                                                       | Purpose                                                           |
-| ------------------------------------------------------------- | ----------------------------------------------------------------- |
-| [`@typespec/compiler`](https://typespec.io/)                  | API-first contract definition language                            |
-| [`@hey-api/openapi-ts`](https://heyapi.dev/)                  | Generate types, Zod schemas, NestJS interfaces & SDK from OpenAPI |
-| [`zod`](https://zod.dev/)                                     | Runtime request validation via generated schemas                  |
-| [`@praha/byethrow`](https://github.com/praha-inc/byethrow)    | Type-safe `Result` monad for error handling                       |
-| [`@praha/error-factory`](https://github.com/praha-inc/praha)  | Factory for creating structured, type-safe errors                 |
-| [`ts-pattern`](https://github.com/gvergnaud/ts-pattern)       | Exhaustive pattern matching on `Result` types                     |
+See [AGENTS.md](./AGENTS.md) and [GEMINI.md](./GEMINI.md) for architectural conventions, rules,
+and best practices for contributing to this codebase.
 
 ## License
 

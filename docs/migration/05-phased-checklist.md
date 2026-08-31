@@ -40,21 +40,35 @@ Then the contract fix itself:
       output contains **zero** `Schema.Never` and a three-member `PokemonVariant` union
 - [x] Commit
 
-## Phase 2 — NestJS teardown → push to `main`
+## Phase 2 — NestJS teardown → push to `main` ✅
 
-- [ ] Delete `src/` entirely (including `src/generated` hey-api output), `nest-cli.json`,
+- [x] Delete `src/` entirely (including `src/generated` hey-api output), `nest-cli.json`,
       `tsconfig.build.json`, `openapi-ts.config.ts`, `patches/`, jest config in `package.json`
-- [ ] Rewrite `package.json` per [03-toolchain.md](03-toolchain.md#target-packagejson)
+- [x] Rewrite `package.json` per [03-toolchain.md](03-toolchain.md#target-packagejson)
       (pinned `4.0.0-rc.112`), delete `package-lock.json`, `npm install`
-- [ ] New `tsconfig.json` / `tsconfig.build.json` per 03-toolchain.md
-- [ ] Keep: `tsp/`, `tspconfig.yaml`, `tsp-output/`, `docs/`, `repos/effect`, eslint/prettier
+- [x] New `tsconfig.json` / `tsconfig.build.json` per 03-toolchain.md
+- [x] Keep: `tsp/`, `tspconfig.yaml`, `tsp-output/`, `docs/`, `repos/effect`, eslint/prettier
       (trim NestJS-specific eslint rules)
-- [ ] `mkdir src/generated && npm run generate` — commit the generated `src/generated/Api.ts`
-- [ ] Add a placeholder `src/main.ts` (`console.log("not yet implemented")`) so
+- [x] `mkdir src/generated && npm run generate` — commit the generated `src/generated/Api.ts`
+- [x] Add a placeholder `src/main.ts` (`console.log("not yet implemented")`) so
       `npm run typecheck` and `npm run build` pass
-- [ ] Verify: `npm run generate` idempotent (no diff on second run), `npm run typecheck` green
-- [ ] Update `README.md` (commands, no more Nest)
-- [ ] Commit, push to `main`
+- [x] Verify: `npm run generate` idempotent (no diff on second run), `npm run typecheck` green
+- [x] Update `README.md` (commands, no more Nest)
+- [x] Commit, push to `main`
+
+Two corrections to 03-toolchain.md surfaced while executing this phase (both applied there):
+
+- `vitest` must be `^4.1.0`, not `^3.0.0` — `@effect/vitest@4.0.0-rc.112` declares
+  `peer vitest ">=4.1.0 <5.0.0"` and `npm install` fails outright on vitest 3.
+- A `vitest.config.ts` is required. With no `include`, `vitest run` discovers the ~440 test
+  files in the vendored `repos/effect` subtree and hangs. It scopes discovery to
+  `src/**/*.test.ts` and sets `passWithNoTests: true` so `npm run check` is green until
+  Phase 3 adds the first tests.
+
+Deferred: eslint is not in the target `package.json`, so `eslint.config.mjs` is kept (trimmed
+of the jest globals, the CommonJS `sourceType`, and the NestJS rule relaxations) but is not
+runnable — no `lint` script and no eslint dependencies. Wire it back up in Phase 7 or drop the
+config.
 
 ## Phase 3 — Runtime skeleton + Health group
 
