@@ -19,6 +19,17 @@ not done until they pass.
 Do this **before** teardown so the contract change is reviewable against the still-running
 NestJS app.
 
+First, refresh the vendored Effect reference (the subtree and the npm pins must always move
+together — the subtree is the API reference all Effect code is verified against):
+
+- [ ] `git subtree pull --prefix repos/effect https://github.com/Effect-TS/effect.git main --squash`
+- [ ] Read the new version from `repos/effect/packages/effect/package.json` and update every
+      `4.0.0-rc.110` pin reference in `docs/migration/03-toolchain.md` and `docs/migration/README.md`
+- [ ] Re-run the generator smoke test against the new rc:
+      `npx @effect/openapi-generator@rc --spec tsp-output/openapi.yaml --format httpapi --name PokedexApi`
+
+Then the contract fix itself:
+
 - [ ] Refactor `tsp/models/pokemon.tsp`: replace `@discriminator` + `extends` with
       `PokemonBase` + `...spread` per [03-toolchain.md](03-toolchain.md#required-contract-fix-discriminated-union)
 - [ ] `npm run typespec:compile` — regenerate `tsp-output/openapi.yaml`
