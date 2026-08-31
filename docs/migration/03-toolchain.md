@@ -5,7 +5,7 @@ tsp/*.tsp ──tsp compile──▶ tsp-output/openapi.yaml ──openapigen (h
 ```
 
 The full pipeline has been **validated against this repo's actual spec** with
-`@effect/openapi-generator@4.0.0-rc.110` (2026-08-31). One contract fix is required first —
+`@effect/openapi-generator@4.0.0-rc.112` (2026-08-31). One contract fix is required first —
 see [Required contract fix](#required-contract-fix-discriminated-union).
 
 ## Target `package.json`
@@ -27,12 +27,12 @@ see [Required contract fix](#required-contract-fix-discriminated-union).
     "check": "npm run typecheck && npm run test"
   },
   "dependencies": {
-    "@effect/platform-node": "4.0.0-rc.110",
-    "effect": "4.0.0-rc.110"
+    "@effect/platform-node": "4.0.0-rc.112",
+    "effect": "4.0.0-rc.112"
   },
   "devDependencies": {
-    "@effect/openapi-generator": "4.0.0-rc.110",
-    "@effect/vitest": "4.0.0-rc.110",
+    "@effect/openapi-generator": "4.0.0-rc.112",
+    "@effect/vitest": "4.0.0-rc.112",
     "@types/node": "^24.0.0",
     "@typespec/compiler": "^1.10.0",
     "@typespec/http": "^1.10.0",
@@ -48,7 +48,7 @@ see [Required contract fix](#required-contract-fix-discriminated-union).
 
 Notes:
 
-- **Pin exact `4.0.0-rc.110`** for all `effect` packages — it matches the vendored reference
+- **Pin exact `4.0.0-rc.112`** for all `effect` packages — it matches the vendored reference
   source in `repos/effect`. Bump all four together, then rerun `npm run generate && npm run check`.
 - `openapigen` is the bin shipped by `@effect/openapi-generator`. It writes generated source
   to **stdout** (warnings go to stderr), hence the redirect.
