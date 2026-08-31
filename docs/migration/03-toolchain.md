@@ -18,14 +18,18 @@ to `tsp/models/pokemon.tsp` in Phase 1 — see
   "type": "module",
   "scripts": {
     "typespec:compile": "tsp compile tsp/main.tsp --config tspconfig.yaml",
-    "generate:api": "openapigen --spec tsp-output/openapi.yaml --format httpapi --name PokedexApi > src/generated/Api.ts && prettier --write src/generated/Api.ts",
+    "generate:api": "openapigen --spec tsp-output/openapi.yaml --format httpapi --name PokedexApi > src/generated/Api.ts && oxfmt src/generated/Api.ts",
     "generate": "npm run typespec:compile && npm run generate:api",
     "dev": "tsx watch src/main.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
     "typecheck": "tsc --noEmit",
+    "lint": "oxlint --type-aware src vitest.config.ts",
+    "lint:fix": "oxlint --type-aware --fix src vitest.config.ts",
+    "format": "oxfmt src vitest.config.ts",
+    "format:check": "oxfmt --check src vitest.config.ts",
     "test": "vitest run",
-    "check": "npm run typecheck && npm run test"
+    "check": "npm run lint && npm run format:check && npm run typecheck && npm run test"
   },
   "dependencies": {
     "@effect/platform-node": "4.0.0-rc.112",
@@ -39,7 +43,9 @@ to `tsp/models/pokemon.tsp` in Phase 1 — see
     "@typespec/http": "^1.10.0",
     "@typespec/openapi": "^1.10.0",
     "@typespec/openapi3": "^1.10.0",
-    "prettier": "^3.4.2",
+    "oxfmt": "0.65.0",
+    "oxlint": "1.80.0",
+    "oxlint-tsgolint": "7.0.2001",
     "tsx": "^4.19.0",
     "typescript": "^5.7.3",
     "vitest": "^4.1.0"
@@ -52,7 +58,9 @@ Notes:
 - **Pin exact `4.0.0-rc.112`** for all `effect` packages — it matches the vendored reference
   source in `repos/effect`. Bump all four together, then rerun `npm run generate && npm run check`.
 - `openapigen` is the bin shipped by `@effect/openapi-generator`. It writes generated source
-  to **stdout** (warnings go to stderr), hence the redirect.
+  to **stdout** (warnings go to stderr), hence the redirect. `oxfmt` then formats it in place.
+- The `oxlint` / `oxfmt` / `oxlint-tsgolint` versions are **pinned exactly** — see
+  [Linting & formatting](#linting--formatting-oxlint--oxfmt).
 - `vitest` must be **`^4.1.0`** — `@effect/vitest@4.0.0-rc.112` declares
   `peer vitest ">=4.1.0 <5.0.0"`, so `npm install` fails on vitest 3.
 - The generator accepts `.yaml` specs directly; no JSON conversion step is needed.
@@ -119,6 +127,59 @@ This file is **not optional**. With no explicit `include`, `vitest run` discover
 test files in the vendored `repos/effect` reference subtree and hangs. Tests are colocated
 under `src/` (`src/**/*.test.ts`) so `tsc --noEmit` type-checks them while
 `tsconfig.build.json` excludes them from `dist/`.
+
+## Linting & formatting: oxlint + oxfmt
+
+The project uses the [oxc](https://oxc.rs/) toolchain — `oxlint` for linting and `oxfmt` for
+formatting. **eslint and prettier are gone**: `eslint.config.mjs` and `.prettierrc` were
+deleted in Phase 2, along with `eslint-plugin-prettier`, `typescript-eslint`, and the rest of
+the eslint dependency tree.
+
+Config lives in `.oxlintrc.json` and `.oxfmtrc.json` (both generated with `oxlint --init` and
+`oxfmt --migrate=prettier`, then adjusted).
+
+```jsonc
+// .oxlintrc.json
+{
+  "plugins": ["typescript", "unicorn", "oxc"],
+  "categories": { "correctness": "error", "suspicious": "error", "pedantic": "warn" },
+  "rules": { "typescript/no-floating-promises": "error" },
+  "env": { "builtin": true, "node": true },
+  "ignorePatterns": ["dist/**", "repos/**", "src/generated/**", "tsp-output/**"],
+}
+
+// .oxfmtrc.json — carried over from the old .prettierrc
+{
+  "singleQuote": true,
+  "trailingComma": "all",
+  "printWidth": 80,
+  "sortPackageJson": false,
+  "ignorePatterns": ["dist/**", "repos/**", "tsp-output/**"],
+}
+```
+
+Things to know:
+
+- **Always pass explicit paths** (`src vitest.config.ts`), never bare `oxlint` / `oxfmt`.
+  `ignorePatterns` does **not** stop oxlint's nested-config discovery: a bare run finds
+  `repos/effect/.oxlintrc.json` in the vendored subtree and dies on its missing
+  `@effect/oxc/oxlint` JS plugin. Same class of trap as the vitest `include` above.
+- **Type-aware rules need `oxlint-tsgolint`.** `--type-aware` fails with "Failed to find
+  tsgolint executable" without it. This is what replaces the old eslint
+  `recommendedTypeChecked` preset, and it is what makes `typescript/no-floating-promises`
+  work — verified to fire on a probe file.
+- **`printWidth` is 80, not the oxfmt default of 100.** `--migrate=prettier` carried over
+  prettier's implicit default, and keeping it means the formatter swap left the 1374-line
+  generated `src/generated/Api.ts` **byte-identical** — no reformat churn.
+- **Versions are pinned exactly.** A minor `oxlint` bump can add rules to a category and turn
+  `npm run check` red without a code change; `oxfmt` is still pre-1.0 (0.65.0) and its output
+  can shift between releases. Bump deliberately, then rerun `npm run generate && npm run check`.
+- **`oxfmt` only handles JS/TS.** Markdown and YAML — `README.md`, `docs/`, `tspconfig.yaml` —
+  are no longer formatted by any tool. Keep them tidy by hand.
+- `prettier` still appears in `package-lock.json` as a transitive dependency of
+  `@typespec/compiler`. That is not ours and cannot be removed.
+- `npm run check` is `lint && format:check && typecheck && test` — the lint and format gates
+  were added once oxlint replaced the never-runnable eslint config.
 
 ## Required contract fix: discriminated union
 
