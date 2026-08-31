@@ -117,16 +117,19 @@ import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
   test: {
-    include: ['src/**/*.test.ts'],
-    passWithNoTests: true,
+    include: ['test/**/*.test.ts', 'src/**/*.test.ts'],
   },
 });
 ```
 
 This file is **not optional**. With no explicit `include`, `vitest run` discovers the ~440
-test files in the vendored `repos/effect` reference subtree and hangs. Tests are colocated
-under `src/` (`src/**/*.test.ts`) so `tsc --noEmit` type-checks them while
-`tsconfig.build.json` excludes them from `dist/`.
+test files in the vendored `repos/effect` reference subtree and hangs.
+
+Tests live in `test/` (see [02-target-architecture.md](02-target-architecture.md)), with
+`src/**/*.test.ts` allowed for colocated unit tests. `tsconfig.json` therefore includes
+`src`, `test`, and `vitest.config.ts` and sets `noEmit`, while `outDir`/`rootDir` live in
+`tsconfig.build.json`, which excludes `test` and `**/*.test.ts` from `dist/`. Keeping
+`rootDir: "src"` in the base config while including `test/` is a TS6059 error.
 
 ## Linting & formatting: oxlint + oxfmt
 
