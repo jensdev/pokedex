@@ -435,99 +435,6 @@ components:
     LegendaryPokemon:
       type: object
       required:
-        - classification
-        - legendaryGroup
-        - isBoxLegendary
-      properties:
-        classification:
-          type: string
-          enum:
-            - legendary
-        legendaryGroup:
-          type: string
-          description: Name of the legendary group or trio (e.g. "Legendary Birds").
-        isBoxLegendary:
-          type: boolean
-          description: Whether this Pokemon is the box mascot of a main series game.
-        mascotForGames:
-          type: array
-          items:
-            type: string
-          description: Game titles for which this Pokemon is the primary mascot, if any.
-      allOf:
-        - $ref: '#/components/schemas/Pokemon'
-      description: |-
-        A Legendary Pokemon — extremely rare, part of a legendary group,
-        cannot be bred.
-    LivenessResponse:
-      type: object
-      required:
-        - status
-        - uptime
-      properties:
-        status:
-          type: string
-          enum:
-            - ok
-        uptime:
-          type: number
-          format: double
-          description: Process uptime in seconds.
-      description: Liveness probe response — confirms the process is running.
-    MythicalPokemon:
-      type: object
-      required:
-        - classification
-        - distributionMethod
-        - isCurrentlyDistributed
-        - loreDescription
-      properties:
-        classification:
-          type: string
-          enum:
-            - mythical
-        distributionMethod:
-          type: string
-          description: How this Pokemon is distributed (e.g. "Mystery Gift", "in-game event").
-        isCurrentlyDistributed:
-          type: boolean
-          description: Whether an active distribution is currently running.
-        loreDescription:
-          type: string
-          description: In-lore description of this Pokemon's mythical origin.
-      allOf:
-        - $ref: '#/components/schemas/Pokemon'
-      description: |-
-        A Mythical Pokemon — event-only distribution, outside the normal story,
-        typically cannot be caught in the wild.
-    NormalPokemon:
-      type: object
-      required:
-        - classification
-        - encounterRate
-      properties:
-        classification:
-          type: string
-          enum:
-            - normal
-        encounterRate:
-          type: number
-          format: float
-          minimum: 0
-          maximum: 100
-          description: Encounter rate in the wild (0–100).
-        evolvesInto:
-          type: array
-          items:
-            type: integer
-            format: int32
-          description: National Pokedex IDs of the Pokemon this one can evolve into, if any.
-      allOf:
-        - $ref: '#/components/schemas/Pokemon'
-      description: A regular, catchable Pokemon with no special legendary status.
-    Pokemon:
-      type: object
-      required:
         - id
         - name
         - primaryType
@@ -538,6 +445,8 @@ components:
         - createdAt
         - updatedAt
         - classification
+        - legendaryGroup
+        - isBoxLegendary
       properties:
         id:
           type: integer
@@ -585,16 +494,193 @@ components:
           description: When this entry was last updated.
         classification:
           type: string
-          description: Discriminator property — narrows to a string literal in each sub-type.
-      discriminator:
-        propertyName: classification
-        mapping:
-          legendary: '#/components/schemas/LegendaryPokemon'
-          mythical: '#/components/schemas/MythicalPokemon'
-          normal: '#/components/schemas/NormalPokemon'
+          enum:
+            - legendary
+          description: Discriminator — fixes this variant's classification.
+        legendaryGroup:
+          type: string
+          description: Name of the legendary group or trio (e.g. "Legendary Birds").
+        isBoxLegendary:
+          type: boolean
+          description: Whether this Pokemon is the box mascot of a main series game.
+        mascotForGames:
+          type: array
+          items:
+            type: string
+          description: Game titles for which this Pokemon is the primary mascot, if any.
       description: |-
-        Base Pokemon model. The `classification` property is the discriminator —
-        concrete sub-types narrow it to a string literal.
+        A Legendary Pokemon — extremely rare, part of a legendary group,
+        cannot be bred.
+    LivenessResponse:
+      type: object
+      required:
+        - status
+        - uptime
+      properties:
+        status:
+          type: string
+          enum:
+            - ok
+        uptime:
+          type: number
+          format: double
+          description: Process uptime in seconds.
+      description: Liveness probe response — confirms the process is running.
+    MythicalPokemon:
+      type: object
+      required:
+        - id
+        - name
+        - primaryType
+        - baseStats
+        - heightMetres
+        - weightKg
+        - isObtainable
+        - createdAt
+        - updatedAt
+        - classification
+        - distributionMethod
+        - isCurrentlyDistributed
+        - loreDescription
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 1025
+          description: National Pokedex number (e.g. 1 for Bulbasaur).
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Species name in lowercase (e.g. "bulbasaur").
+        primaryType:
+          allOf:
+            - $ref: '#/components/schemas/PokemonType'
+          description: Primary elemental type.
+        secondaryType:
+          allOf:
+            - $ref: '#/components/schemas/PokemonType'
+          description: Secondary elemental type, if any.
+        baseStats:
+          allOf:
+            - $ref: '#/components/schemas/PokemonBaseStats'
+          description: Base stat block.
+        heightMetres:
+          type: number
+          format: float
+          minimum: 0
+          description: Height in metres.
+        weightKg:
+          type: number
+          format: float
+          minimum: 0
+          description: Weight in kilograms.
+        isObtainable:
+          type: boolean
+          description: Whether this Pokemon appears in the wild in main series games.
+        createdAt:
+          type: string
+          format: date-time
+          description: When this entry was added to the Pokedex.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this entry was last updated.
+        classification:
+          type: string
+          enum:
+            - mythical
+          description: Discriminator — fixes this variant's classification.
+        distributionMethod:
+          type: string
+          description: How this Pokemon is distributed (e.g. "Mystery Gift", "in-game event").
+        isCurrentlyDistributed:
+          type: boolean
+          description: Whether an active distribution is currently running.
+        loreDescription:
+          type: string
+          description: In-lore description of this Pokemon's mythical origin.
+      description: |-
+        A Mythical Pokemon — event-only distribution, outside the normal story,
+        typically cannot be caught in the wild.
+    NormalPokemon:
+      type: object
+      required:
+        - id
+        - name
+        - primaryType
+        - baseStats
+        - heightMetres
+        - weightKg
+        - isObtainable
+        - createdAt
+        - updatedAt
+        - classification
+        - encounterRate
+      properties:
+        id:
+          type: integer
+          format: int32
+          minimum: 1
+          maximum: 1025
+          description: National Pokedex number (e.g. 1 for Bulbasaur).
+        name:
+          type: string
+          minLength: 1
+          maxLength: 100
+          description: Species name in lowercase (e.g. "bulbasaur").
+        primaryType:
+          allOf:
+            - $ref: '#/components/schemas/PokemonType'
+          description: Primary elemental type.
+        secondaryType:
+          allOf:
+            - $ref: '#/components/schemas/PokemonType'
+          description: Secondary elemental type, if any.
+        baseStats:
+          allOf:
+            - $ref: '#/components/schemas/PokemonBaseStats'
+          description: Base stat block.
+        heightMetres:
+          type: number
+          format: float
+          minimum: 0
+          description: Height in metres.
+        weightKg:
+          type: number
+          format: float
+          minimum: 0
+          description: Weight in kilograms.
+        isObtainable:
+          type: boolean
+          description: Whether this Pokemon appears in the wild in main series games.
+        createdAt:
+          type: string
+          format: date-time
+          description: When this entry was added to the Pokedex.
+        updatedAt:
+          type: string
+          format: date-time
+          description: When this entry was last updated.
+        classification:
+          type: string
+          enum:
+            - normal
+          description: Discriminator — fixes this variant's classification.
+        encounterRate:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: Encounter rate in the wild (0–100).
+        evolvesInto:
+          type: array
+          items:
+            type: integer
+            format: int32
+          description: National Pokedex IDs of the Pokemon this one can evolve into, if any.
+      description: A regular, catchable Pokemon with no special legendary status.
     PokemonBaseStats:
       type: object
       required:
@@ -660,8 +746,8 @@ components:
         - $ref: '#/components/schemas/MythicalPokemon'
       description: |-
         Discriminated union of all concrete Pokemon classifications.
-        Used as the return type for Pokedex operations — results in a
-        `oneOf` with `discriminator.mapping` in the generated OpenAPI schema.
+        Used as the return type for Pokedex operations — emits an `anyOf` of the
+        three self-contained variant schemas, discriminated on `classification`.
     UpdatePokemonRequest:
       type: object
       required:
