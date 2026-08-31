@@ -20,7 +20,8 @@ import * as Fiber from "./Fiber.ts"
 import type * as Filter from "./Filter.ts"
 import type { LazyArg } from "./Function.ts"
 import { constant, constTrue, constVoid, dual, identity as identity_ } from "./Function.ts"
-import { ClockRef, endSpan } from "./internal/effect.ts"
+import * as Count from "./internal/count.ts"
+import { ClockRef, endSpan, scopeFinalizerCountUnsafe } from "./internal/effect.ts"
 import { addSpanStackTrace } from "./internal/tracer.ts"
 import * as Iterable from "./Iterable.ts"
 import * as Latch from "./Latch.ts"
@@ -708,6 +709,11 @@ export const fromChunk = <A>(chunk: Chunk.Chunk<A>): Channel<A> => fromArray(Chu
 /**
  * Creates a `Channel` from an iterator that emits arrays of elements.
  *
+ * **Details**
+ *
+ * Finite fractional `chunkSize` values are rounded down. `NaN` and non-positive
+ * values are treated as `1` so every successful pull emits a non-empty array.
+ *
  * **Example** (Batching iterator output)
  *
  * ```ts import.meta.vitest
@@ -754,15 +760,16 @@ export const fromChunk = <A>(chunk: Chunk.Chunk<A>): Channel<A> => fromArray(Chu
 export const fromIteratorArray = <A, L>(
   iterator: LazyArg<Iterator<A, L>>,
   chunkSize = DefaultChunkSize
-): Channel<Arr.NonEmptyReadonlyArray<A>, never, L> =>
-  fromPull(
+): Channel<Arr.NonEmptyReadonlyArray<A>, never, L> => {
+  const size = Count.normalizeNonEmpty(chunkSize)
+  return fromPull(
     Effect.sync(() => {
       const iter = iterator()
       let done = Option.none<L>()
       return Effect.suspend(() => {
         if (done._tag === "Some") return Cause.done(done.value)
         const buffer: Array<A> = []
-        while (buffer.length < chunkSize) {
+        while (buffer.length < size) {
           const state = iter.next()
           if (state.done) {
             if (buffer.length === 0) {
@@ -777,6 +784,7 @@ export const fromIteratorArray = <A, L>(
       })
     })
   )
+}
 
 /**
  * Creates a `Channel` that emits all elements from an iterable.
@@ -799,6 +807,11 @@ export const fromIterable = <A, L>(iterable: Iterable<A, L>): Channel<A, never, 
 
 /**
  * Creates a `Channel` that emits arrays of elements from an iterable.
+ *
+ * **Details**
+ *
+ * Finite fractional `chunkSize` values are rounded down. `NaN` and non-positive
+ * values are treated as `1`.
  *
  * **Example** (Batching iterable output)
  *
@@ -2171,7 +2184,7 @@ const mapEffectConcurrent = <
           Effect.Effect<OutElem2, OutErr | EX | Cause.Done<OutDone>>,
           OutErr | EX | Cause.Done<OutDone>
         >(concurrencyN - 2)
-        yield* Scope.addFinalizer(forkedScope, Queue.shutdown(queue))
+        yield* Scope.addFinalizer(forkedScope, Queue.shutdown(effects))
 
         yield* Queue.take(effects).pipe(
           Effect.flatten,
@@ -2500,7 +2513,7 @@ const flatMapSequential = <
       const catchHalt = Pull.catchDone((_) => {
         childPull = undefined
         // we can reuse the scope if the only finalizer is the "fork" one
-        if (childScope!.state._tag === "Open" && childScope!.state.finalizers.size === 1) {
+        if (childScope!.state._tag === "Open" && scopeFinalizerCountUnsafe(childScope!) === 1) {
           return makePull
         }
         const close = Scope.close(childScope!, Exit.void)
