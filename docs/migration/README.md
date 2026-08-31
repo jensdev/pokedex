@@ -27,7 +27,7 @@ TypeSpec contract in `tsp/` as the single source of truth.
 
 | Decision | Choice | Why |
 | --- | --- | --- |
-| Effect version | Pin exact `4.0.0-rc.112` | Matches the vendored source in `repos/effect` used as the API reference; RC releases can break between versions |
+| Effect version | Pin exact `4.0.0-rc.112` | RC releases can break between versions; the installed package source (`node_modules/effect/src`) is the API reference |
 | Generator | `@effect/openapi-generator` (`openapigen`), format `httpapi` | Generates `HttpApi`/`HttpApiGroup`/`HttpApiEndpoint` + `Schema` models directly from `tsp-output/openapi.yaml` — validated end-to-end against this repo's spec |
 | Contract change | Replace `extends Pokemon` + `@discriminator` with `...spread` composition in `tsp/models/pokemon.tsp` | The generator collapses `allOf`-inheritance schemas to `Schema.Never` (verified). Spread emits self-contained variant schemas, which generate a correct discriminated union (verified). Wire format is unchanged |
 | HTTP platform | `@effect/platform-node` (`NodeHttpServer` + `node:http`) | Node is the current deployment target; Bun swap is a one-line change in `main.ts` |
@@ -36,6 +36,10 @@ TypeSpec contract in `tsp/` as the single source of truth.
 
 ## Ground rules
 
+- Effect APIs are verified against `node_modules/effect/src` (the installed rc), never from
+  memory. `repos/effect` tracks upstream `main` and has drifted ahead of the published
+  `4.0.0-rc.112` despite reporting that version — use it only for what the installed package
+  does not ship in source (e.g. `@effect/platform-node`, which ships its own `src/`).
 - `src/generated/Api.ts` is emitted — never hand-edited. Regenerate with `npm run generate`.
 - Handlers contain **no domain logic**: they translate between the wire contract and domain
   services (error mapping included).

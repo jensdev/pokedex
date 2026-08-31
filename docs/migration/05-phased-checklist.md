@@ -72,21 +72,44 @@ Three corrections to 03-toolchain.md surfaced while executing this phase (all ap
   replaced by `oxlint` + `oxfmt` instead. The same "always pass explicit paths" trap as vitest
   applies: a bare `oxlint` run finds `repos/effect/.oxlintrc.json` and dies on its JS plugin.
 
-## Phase 3 — Runtime skeleton + Health group
+## Phase 3 — Runtime skeleton + Health group ✅
 
 Smallest end-to-end slice: server boots, one group fully implemented.
 
-- [ ] `src/AppConfig.ts` (`PORT` handled in main, `APP_VERSION`, `FLAKY_UPSTREAM_RATE`)
-- [ ] `src/services/Health.ts` (`Context.Service`; uptime via `Clock`, values per behavior spec)
-- [ ] `src/http/HealthHandlers.ts` (`HttpApiBuilder.group(PokedexApi, "Health", ...)`)
-- [ ] `src/http/Routes.ts` with the Health group only + `HttpApiScalar` docs route +
+- [x] `src/AppConfig.ts` (`PORT` handled in main, `APP_VERSION`, `FLAKY_UPSTREAM_RATE`)
+- [x] `src/services/Health.ts` (`Context.Service`; uptime via `Clock`, values per behavior spec)
+- [x] `src/http/HealthHandlers.ts` (`HttpApiBuilder.group(PokedexApi, "Health", ...)`)
+- [x] `src/http/Routes.ts` with the Health group only + `HttpApiScalar` docs route +
       `openapiPath: "/openapi.json"`; **stub the Pokedex group** with
       `Effect.die("not implemented")` handlers so `HttpApiBuilder.layer` finds every group
-- [ ] `src/main.ts` per [04-implementation-patterns.md](04-implementation-patterns.md#5-routes--entry-point--httproutests-and-maints)
-- [ ] Tests: `HttpApiTest.groups(PokedexApi, ["Health"])` — check all three endpoints
-- [ ] Verify manually: `npm run dev`, then `curl localhost:3000/health`,
+- [x] `src/main.ts` per [04-implementation-patterns.md](04-implementation-patterns.md#5-routes--entry-point--httproutests-and-maints)
+- [x] Tests: `HttpApiTest.groups(PokedexApi, ["Health"])` — check all three endpoints
+- [x] Verify manually: `npm run dev`, then `curl localhost:3000/health`,
       `/health/live`, `/health/ready`, open `/docs`, `/openapi.json`
-- [ ] Commit
+- [x] Commit
+
+Notes from executing this phase:
+
+- **`repos/effect` has drifted ahead of the published `4.0.0-rc.112`.** Its
+  `packages/effect/package.json` still reads `4.0.0-rc.112`, but the source is post-release
+  `main`: `Config` constructors were renamed there (`Config.string` → `Config.String`,
+  `Config.finite` → `Config.Finite`, `Config.port` → `Config.Port`). The published package
+  keeps the lowercase names, so **`node_modules/effect/src` is the authoritative reference
+  for code that has to compile**; the subtree is for reading upstream direction. Verify
+  against `node_modules/effect/src` first, and only fall back to `repos/effect` when the
+  installed package does not ship the source.
+- Tests live in `test/`, which the Phase 2 configs did not cover. `tsconfig.json` now
+  includes `src`, `test`, and `vitest.config.ts` with `noEmit`; `outDir`/`rootDir` moved to
+  `tsconfig.build.json` (which already excluded `test`), because `rootDir: "src"` plus an
+  included `test/` is a TS6059 error. `vitest.config.ts` includes `test/**/*.test.ts` and
+  dropped `passWithNoTests`; `lint`/`format` scripts gained the `test` path.
+- The Pokedex stub group is a plain (non-generator) `build` function — `Effect.fn(function*)`
+  with no `yield` trips oxlint's `require-yield`. `HttpApiBuilder.group` accepts a `Handlers`
+  value as well as an `Effect` of one.
+- `HttpApiTest.groups` gives a typed client that decodes the success channel, so it cannot
+  observe the wire status. `test/HealthApi.test.ts` therefore adds a second suite driving
+  `HttpRouter.toHttpEffect(AllRoutes)` to assert 200s, content types, and that
+  `/openapi.json` and `/docs` are mounted.
 
 ## Phase 4 — Domain + repository
 

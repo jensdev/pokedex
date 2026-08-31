@@ -1,7 +1,14 @@
 # Implementation Patterns (Effect 4.0 RC)
 
-All snippets below use APIs verified against `repos/effect` at `4.0.0-rc.112`. Import paths
-to remember:
+All snippets below use APIs verified against the installed `effect@4.0.0-rc.112`.
+
+> **Verify against `node_modules/effect/src`, not `repos/effect`.** The vendored subtree
+> tracks upstream `main` and has drifted ahead of the published rc while still reporting
+> version `4.0.0-rc.112` — e.g. it renames `Config.string`/`finite`/`port` to
+> `Config.String`/`Finite`/`Port`, which do not exist in the installed package. Use the
+> subtree only when the installed package does not ship the source you need.
+
+Import paths to remember:
 
 ```ts
 import { Config, Context, Effect, Layer, Option, Ref, Schema } from "effect"
