@@ -41,7 +41,9 @@ tsp/*.tsp ──tsp compile──▶ tsp-output/openapi.yaml ──openapigen (h
 ├── tspconfig.yaml          # TypeSpec compiler config
 ├── tsconfig.json           # Type-checking config
 ├── tsconfig.build.json     # Build config (excludes tests)
-└── vitest.config.ts        # Test config
+├── vitest.config.ts        # Test config
+├── .oxlintrc.json          # oxlint config
+└── .oxfmtrc.json           # oxfmt config
 ```
 
 ## Prerequisites
@@ -51,18 +53,22 @@ tsp/*.tsp ──tsp compile──▶ tsp-output/openapi.yaml ──openapigen (h
 
 ## Commands
 
-| Command                    | What it does                                                     |
-| -------------------------- | ---------------------------------------------------------------- |
-| `npm install`              | Install dependencies                                             |
-| `npm run generate`         | `typespec:compile` + `generate:api` — the full contract pipeline |
-| `npm run typespec:compile` | Compile `tsp/` into `tsp-output/openapi.yaml`                    |
-| `npm run generate:api`     | Generate `src/generated/Api.ts` from the OpenAPI spec            |
-| `npm run dev`              | Run `src/main.ts` in watch mode (`tsx`)                          |
-| `npm run build`            | Compile to `dist/`                                               |
-| `npm start`                | Run the compiled server (`node dist/main.js`)                    |
-| `npm run typecheck`        | `tsc --noEmit`                                                   |
-| `npm run test`             | Run the test suite (`vitest run`)                                |
-| `npm run check`            | `typecheck` + `test` — the gate every change must pass           |
+| Command                    | What it does                                                               |
+| -------------------------- | -------------------------------------------------------------------------- |
+| `npm install`              | Install dependencies                                                       |
+| `npm run generate`         | `typespec:compile` + `generate:api` — the full contract pipeline           |
+| `npm run typespec:compile` | Compile `tsp/` into `tsp-output/openapi.yaml`                              |
+| `npm run generate:api`     | Generate `src/generated/Api.ts` from the OpenAPI spec                      |
+| `npm run dev`              | Run `src/main.ts` in watch mode (`tsx`)                                    |
+| `npm run build`            | Compile to `dist/`                                                         |
+| `npm start`                | Run the compiled server (`node dist/main.js`)                              |
+| `npm run typecheck`        | `tsc --noEmit`                                                             |
+| `npm run lint`             | Lint with `oxlint` (type-aware)                                            |
+| `npm run lint:fix`         | Lint and auto-fix                                                          |
+| `npm run format`           | Format with `oxfmt`                                                        |
+| `npm run format:check`     | Check formatting without writing                                           |
+| `npm run test`             | Run the test suite (`vitest run`)                                          |
+| `npm run check`            | `lint` + `format:check` + `typecheck` + `test` — the gate for every change |
 
 After changing anything under `tsp/`, run `npm run generate` and commit the regenerated
 `tsp-output/openapi.yaml` and `src/generated/Api.ts`.
@@ -76,6 +82,7 @@ After changing anything under `tsp/`, run `npm run generate` and commit the rege
 | [`@typespec/compiler`](https://typespec.io/)                                  | API-first contract definition language                   |
 | [`@effect/openapi-generator`](https://github.com/Effect-TS/effect)            | Generates the Effect `HttpApi` contract from OpenAPI     |
 | [`@effect/vitest`](https://github.com/Effect-TS/effect)                       | Effect-aware test helpers on top of `vitest`             |
+| [`oxlint` / `oxfmt`](https://oxc.rs/)                                         | Linting and formatting (replaces eslint + prettier)      |
 
 All `effect` packages are **pinned to an exact version** (`4.0.0-rc.112`) matching the vendored
 source in `repos/effect`. Bump the pins and the subtree together, then rerun

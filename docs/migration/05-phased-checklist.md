@@ -47,8 +47,11 @@ Then the contract fix itself:
 - [x] Rewrite `package.json` per [03-toolchain.md](03-toolchain.md#target-packagejson)
       (pinned `4.0.0-rc.112`), delete `package-lock.json`, `npm install`
 - [x] New `tsconfig.json` / `tsconfig.build.json` per 03-toolchain.md
-- [x] Keep: `tsp/`, `tspconfig.yaml`, `tsp-output/`, `docs/`, `repos/effect`, eslint/prettier
-      (trim NestJS-specific eslint rules)
+- [x] Keep: `tsp/`, `tspconfig.yaml`, `tsp-output/`, `docs/`, `repos/effect`
+- [x] Replace eslint/prettier with **oxlint + oxfmt** (`.oxlintrc.json`, `.oxfmtrc.json`) —
+      `eslint.config.mjs` and `.prettierrc` deleted, `oxfmt` replaces `prettier --write` in
+      `generate:api`, and `npm run check` gains `lint` + `format:check` gates. See
+      [03-toolchain.md](03-toolchain.md#linting--formatting-oxlint--oxfmt)
 - [x] `mkdir src/generated && npm run generate` — commit the generated `src/generated/Api.ts`
 - [x] Add a placeholder `src/main.ts` (`console.log("not yet implemented")`) so
       `npm run typecheck` and `npm run build` pass
@@ -56,7 +59,7 @@ Then the contract fix itself:
 - [x] Update `README.md` (commands, no more Nest)
 - [x] Commit, push to `main`
 
-Two corrections to 03-toolchain.md surfaced while executing this phase (both applied there):
+Three corrections to 03-toolchain.md surfaced while executing this phase (all applied there):
 
 - `vitest` must be `^4.1.0`, not `^3.0.0` — `@effect/vitest@4.0.0-rc.112` declares
   `peer vitest ">=4.1.0 <5.0.0"` and `npm install` fails outright on vitest 3.
@@ -64,11 +67,10 @@ Two corrections to 03-toolchain.md surfaced while executing this phase (both app
   files in the vendored `repos/effect` subtree and hangs. It scopes discovery to
   `src/**/*.test.ts` and sets `passWithNoTests: true` so `npm run check` is green until
   Phase 3 adds the first tests.
-
-Deferred: eslint is not in the target `package.json`, so `eslint.config.mjs` is kept (trimmed
-of the jest globals, the CommonJS `sourceType`, and the NestJS rule relaxations) but is not
-runnable — no `lint` script and no eslint dependencies. Wire it back up in Phase 7 or drop the
-config.
+- **Lint/format is oxc, not eslint/prettier.** The target `package.json` had `prettier` but no
+  eslint deps, which would have left `eslint.config.mjs` as a dead config. Both tools are
+  replaced by `oxlint` + `oxfmt` instead. The same "always pass explicit paths" trap as vitest
+  applies: a bare `oxlint` run finds `repos/effect/.oxlintrc.json` and dies on its JS plugin.
 
 ## Phase 3 — Runtime skeleton + Health group
 
@@ -130,6 +132,7 @@ No HTTP in this phase; pure Effect.
 - [ ] Logging/tracing pass: `Effect.fn` span names on service methods,
       `Effect.annotateCurrentSpan` for search/filter params
 - [ ] CI: `npm run generate && git diff --exit-code` (contract drift gate) + `npm run check`
+      (already covers `lint`, `format:check`, `typecheck`, `test`)
 - [ ] `GEMINI.md` / `AGENTS.md` refresh: new commands, architecture pointers to `docs/migration/`
 - [ ] Optional: typed client package via `--format httpclient` for consumers
 - [ ] Optional: revisit parity decisions P1/P2 with stakeholders
