@@ -13,10 +13,10 @@
  */
 
 /** @effect-diagnostics schemaStructWithTag:skip-file */
-import type { StandardJSONSchemaV1, StandardSchemaV1 } from "@standard-schema/spec"
 import * as Arr from "./Array.ts"
 import * as BigDecimal_ from "./BigDecimal.ts"
 import type * as Brand from "./Brand.ts"
+import * as ByteSize_ from "./ByteSize.ts"
 import * as Cause_ from "./Cause.ts"
 import * as Chunk_ from "./Chunk.ts"
 import * as Data from "./Data.ts"
@@ -26,7 +26,7 @@ import * as Duration_ from "./Duration.ts"
 import * as Effect from "./Effect.ts"
 import * as Encoding from "./Encoding.ts"
 import * as Equal from "./Equal.ts"
-import * as Equivalence from "./Equivalence.ts"
+import type * as Equivalence from "./Equivalence.ts"
 import * as Exit_ from "./Exit.ts"
 import type { Formatter } from "./Formatter.ts"
 import { format, formatPropertyKey } from "./Formatter.ts"
@@ -35,14 +35,15 @@ import * as Graph_ from "./Graph.ts"
 import * as HashMap_ from "./HashMap.ts"
 import * as HashSet_ from "./HashSet.ts"
 import * as core from "./internal/core.ts"
+import { effectIsExit } from "./internal/effect.ts"
 import * as InternalGraph from "./internal/graph.ts"
 import * as InternalRecord from "./internal/record.ts"
 import * as InternalAnnotations from "./internal/schema/annotations.ts"
 import * as InternalSchema from "./internal/schema/schema.ts"
-import * as InternalArbitrary from "./internal/schema/toArbitrary.ts"
 import * as InternalEquivalence from "./internal/schema/toEquivalence.ts"
 import * as InternalToJsonSchemaDocument from "./internal/schema/toJsonSchemaDocument.ts"
 import * as InternalToRepresentation from "./internal/schema/toRepresentation.ts"
+import { getStackTraceLimit, setStackTraceLimit } from "./internal/stackTraceLimit.ts"
 import * as JsonPatch from "./JsonPatch.ts"
 import * as JsonSchema from "./JsonSchema.ts"
 import { remainder } from "./Number.ts"
@@ -62,9 +63,9 @@ import * as SchemaIssue from "./SchemaIssue.ts"
 import * as SchemaParser from "./SchemaParser.ts"
 import type * as SchemaRepresentation from "./SchemaRepresentation.ts"
 import * as SchemaTransformation from "./SchemaTransformation.ts"
+import type { StandardJSONSchemaV1, StandardSchemaV1 } from "./StandardSchema.ts"
 import type { Assign, Lambda, Mutable, Simplify } from "./Struct.ts"
 import * as Struct_ from "./Struct.ts"
-import type * as FastCheck from "./testing/FastCheck.ts"
 import type { RequiredKeys, UnionToIntersection } from "./Types.ts"
 import type { Unify } from "./Unify.ts"
 
@@ -1143,7 +1144,7 @@ export interface Optic<out T, out Iso> extends Schema<T> {
   readonly "Rebuild": Optic<T, Iso>
 }
 
-const SchemaErrorTypeId = "~effect/SchemaError/SchemaError"
+const SchemaErrorTypeId = "~effect/Schema/SchemaError"
 
 /**
  * Error thrown or returned when schema decoding or encoding fails.
@@ -1180,7 +1181,13 @@ export class SchemaError extends Data.TaggedError("SchemaError")<{
 }> {
   readonly [SchemaErrorTypeId]: typeof SchemaErrorTypeId = SchemaErrorTypeId
   constructor(issue: SchemaIssue.Issue) {
-    super({ issue })
+    const stackTraceLimit = getStackTraceLimit()
+    setStackTraceLimit(0)
+    try {
+      super({ issue })
+    } finally {
+      setStackTraceLimit(stackTraceLimit)
+    }
   }
   override get message() {
     return SchemaIssue.defaultFormatter(this.issue)
@@ -1518,6 +1525,9 @@ export function decodeUnknownEffect<S extends Constraint>(schema: S, options?: S
 function fromIssueEffect<A, R>(
   self: Effect.Effect<A, SchemaIssue.Issue, R>
 ): Effect.Effect<A, SchemaError, R> {
+  if (effectIsExit(self)) {
+    return fromIssueExit(self as Exit_.Exit<A, SchemaIssue.Issue>)
+  }
   return Effect.catchCause(
     self,
     (cause) => Effect.failCauseSync(() => Cause_.map(cause, (issue) => new SchemaError(issue)))
@@ -4798,6 +4808,12 @@ interface mutableLambda extends Lambda {
 /**
  * Makes an array or tuple schema mutable, removing the `readonly` modifier.
  *
+ * **Gotchas**
+ *
+ * This combinator does not support an encoding attached to the array or tuple
+ * node and throws if one is present. Encodings on element schemas are
+ * supported.
+ *
  * **Example** (Defining mutable arrays)
  *
  * ```ts import.meta.vitest
@@ -4815,9 +4831,7 @@ interface mutableLambda extends Lambda {
  * @category transforming
  * @since 3.10.0
  */
-export const mutable = Struct_.lambda<mutableLambda>((schema) => {
-  return make(new SchemaAST.Arrays(true, schema.ast.elements, schema.ast.rest), { schema })
-})
+export const mutable = Struct_.lambda<mutableLambda>((schema) => make(SchemaAST.mutable(schema.ast), { schema }))
 
 /**
  * Type-level representation returned by {@link Union}.
@@ -6197,6 +6211,14 @@ type Flatten<Schemas> = Schemas extends readonly [infer Head, ...infer Tail]
   : [Head, ...Flatten<Tail>]
   : []
 
+type MatchCasesResult<Cases> = {
+  [K in keyof Cases]-?: NonNullable<Cases[K]> extends (...args: Array<any>) => infer R ? R : never
+}[keyof Cases]
+
+type MatchOrElseResult<Cases, OrElse extends (...args: Array<any>) => any> = Unify<
+  MatchCasesResult<Cases> | ReturnType<OrElse>
+>
+
 type TaggedUnionUtils<
   Tag extends PropertyKey,
   Members extends ReadonlyArray<Constraint & { readonly Type: { readonly [K in Tag]: PropertyKey } }>,
@@ -6227,6 +6249,31 @@ type TaggedUnionUtils<
       cases: Cases
     ): (value: Members[number]["Type"]) => Cases[keyof Cases] extends (value: any) => infer R ? Unify<R>
       : never
+  }
+  readonly matchOrElse: {
+    <
+      Cases extends
+        & { [M in Flattened[number] as M["Type"][Tag]]+?: (value: M["Type"]) => any }
+        & { [K in Exclude<keyof Cases, Flattened[number]["Type"][Tag]>]: never },
+      OrElse extends (
+        value: Exclude<Members[number]["Type"], { readonly [K in Tag]: keyof Cases }>
+      ) => any
+    >(
+      value: Members[number]["Type"],
+      cases: Cases,
+      orElse: OrElse
+    ): MatchOrElseResult<Cases, OrElse>
+    <
+      Cases extends
+        & { [M in Flattened[number] as M["Type"][Tag]]+?: (value: M["Type"]) => any }
+        & { [K in Exclude<keyof Cases, Flattened[number]["Type"][Tag]>]: never },
+      OrElse extends (
+        value: Exclude<Members[number]["Type"], { readonly [K in Tag]: keyof Cases }>
+      ) => any
+    >(
+      cases: Cases,
+      orElse: OrElse
+    ): (value: Members[number]["Type"]) => MatchOrElseResult<Cases, OrElse>
   }
 }
 
@@ -6283,7 +6330,7 @@ export function toTaggedUnion<const Tag extends PropertyKey>(tag: Tag) {
 
     walk(self)
 
-    return Object.assign(self, { cases, discriminants, isAnyOf, guards, match }) as any
+    return Object.assign(self, { cases, discriminants, isAnyOf, guards, match, matchOrElse }) as any
 
     function walk(schema: Constraint) {
       const ast = schema.ast
@@ -6329,6 +6376,24 @@ export function toTaggedUnion<const Tag extends PropertyKey>(tag: Tag) {
       const handler = Object.hasOwn(cases, key) ? cases[key] : undefined
       return handler(value)
     }
+
+    function matchOrElse() {
+      if (arguments.length === 2) {
+        const cases = arguments[0]
+        const orElse = arguments[1]
+        return function(value: any) {
+          const key = value[tag]
+          const handler = Object.hasOwn(cases, key) ? cases[key] ?? orElse : orElse
+          return handler(value)
+        }
+      }
+      const value = arguments[0]
+      const cases = arguments[1]
+      const orElse = arguments[2]
+      const key = value[tag]
+      const handler = Object.hasOwn(cases, key) ? cases[key] ?? orElse : orElse
+      return handler(value)
+    }
   }
 }
 
@@ -6365,12 +6430,23 @@ export interface TaggedUnion<Cases extends Record<string, Constraint>> extends
       cases: { [K in keyof Cases]: (value: Cases[K]["Type"]) => Output }
     ): Output
   }
+  readonly matchOrElse: {
+    <Output>(
+      value: Cases[keyof Cases]["Type"],
+      cases: { [K in keyof Cases]?: (value: Cases[K]["Type"]) => Output },
+      orElse: (value: Cases[keyof Cases]["Type"]) => Output
+    ): Output
+    <Output>(
+      cases: { [K in keyof Cases]?: (value: Cases[K]["Type"]) => Output },
+      orElse: (value: Cases[keyof Cases]["Type"]) => Output
+    ): (value: Cases[keyof Cases]["Type"]) => Output
+  }
 }
 
 /**
  * Builds a discriminated union from a record of field sets, one per variant.
  * Each key becomes the `_tag` literal and the value is passed to {@link TaggedStruct}.
- * The result includes `cases`, `guards`, `isAnyOf`, and `match` utilities.
+ * The result includes `cases`, `guards`, `isAnyOf`, `match`, and `matchOrElse` utilities.
  *
  * **Example** (Pattern matching a discriminated union)
  *
@@ -6405,8 +6481,8 @@ export function TaggedUnion<const CasesByTag extends Record<string, Struct.Field
     members.push(member)
   }
   const union = Union(members)
-  const { guards, isAnyOf, match } = toTaggedUnion("_tag")(union)
-  return make(union.ast, { cases, isAnyOf, guards, match })
+  const { guards, isAnyOf, match, matchOrElse } = toTaggedUnion("_tag")(union)
+  return make(union.ast, { cases, isAnyOf, guards, match, matchOrElse })
 }
 
 /**
@@ -6519,6 +6595,18 @@ export function link<T>() {
   ): SchemaAST.Link => {
     return new SchemaAST.Link(encodeTo.ast, SchemaTransformation.make(transformation))
   }
+}
+
+/**
+ * Constructs a decode-only `SchemaAST.Link`.
+ *
+ * @internal
+ */
+export function linkDecoding<T>() {
+  return <To extends Constraint>(
+    to: To,
+    decode: SchemaGetter.Getter<T, NoInfer<To["Type"]>>
+  ): SchemaAST.Link => link<T>()(to, { decode, encode: SchemaGetter.forbiddenEncoding })
 }
 
 // -----------------------------------------------------------------------------
@@ -6681,7 +6769,7 @@ const TRIMMED_PATTERN = "^\\S[\\s\\S]*\\S$|^\\S$|^$"
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `patterns`
+ * During arbitrary generation, this applies a `patterns`
  * constraint to ensure generated strings match the trimmed pattern.
  *
  * @category validation
@@ -6699,10 +6787,8 @@ export function isTrimmed(annotations?: Annotations.Filter) {
       },
       toJsonSchema: () => ({ pattern: regExp.source }),
       toCode: () => ({ runtime: "Schema.isTrimmed()" }),
-      arbitrary: {
-        constraint: {
-          patterns: [TRIMMED_PATTERN]
-        }
+      arbitraryConstraint: {
+        patterns: [{ source: TRIMMED_PATTERN, flags: "" }]
       },
       ...annotations
     }
@@ -6738,7 +6824,7 @@ export const isTrimmedReviver: SchemaRepresentation.FilterReviver<null> = Intern
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `patterns`
+ * During arbitrary generation, this applies a `patterns`
  * constraint to ensure generated strings match the specified RegExp pattern.
  *
  * @category validation
@@ -6802,7 +6888,7 @@ export const isPatternReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `patterns`
+ * During arbitrary generation, this applies a `patterns`
  * constraint to ensure generated strings match the number string pattern.
  *
  * @category validation
@@ -6949,7 +7035,7 @@ const getUUIDRegExp = (version?: 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8): globalThis.RegE
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `patterns`
+ * During arbitrary generation, this applies a `patterns`
  * constraint to ensure generated strings match the UUID pattern.
  *
  * @see {@link isGUID} for shape-only GUID validation.
@@ -7012,7 +7098,7 @@ const GUID_REGEXP = /^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `patterns`
+ * During arbitrary generation, this applies a `patterns`
  * constraint to ensure generated strings match the GUID pattern.
  *
  * @see {@link isUUID} for strict UUID validation.
@@ -7066,7 +7152,7 @@ export const isGUIDReviver: SchemaRepresentation.FilterReviver<null> = InternalS
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `patterns`
+ * During arbitrary generation, this applies a `patterns`
  * constraint to ensure generated strings match the ULID pattern.
  *
  * @category validation
@@ -7118,7 +7204,7 @@ export const isULIDReviver: SchemaRepresentation.FilterReviver<null> = InternalS
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `patterns`
+ * During arbitrary generation, this applies a `patterns`
  * constraint to ensure generated strings match the Base64 pattern.
  *
  * @category validation
@@ -7172,7 +7258,7 @@ export const isBase64Reviver: SchemaRepresentation.FilterReviver<null> = Interna
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `patterns`
+ * During arbitrary generation, this applies a `patterns`
  * constraint to ensure generated strings match the Base64URL pattern.
  *
  * @category validation
@@ -7237,10 +7323,8 @@ export function isStartsWith(startsWith: string, annotations?: Annotations.Filte
       },
       toJsonSchema: () => ({ pattern: regExp.source }),
       toCode: () => ({ runtime: `Schema.isStartsWith(${format(startsWith)})` }),
-      arbitrary: {
-        constraint: {
-          patterns: [regExp.source]
-        }
+      arbitraryConstraint: {
+        patterns: [{ source: regExp.source, flags: regExp.flags }]
       },
       ...annotations
     }
@@ -7291,10 +7375,8 @@ export function isEndsWith(endsWith: string, annotations?: Annotations.Filter) {
       },
       toJsonSchema: () => ({ pattern: regExp.source }),
       toCode: () => ({ runtime: `Schema.isEndsWith(${format(endsWith)})` }),
-      arbitrary: {
-        constraint: {
-          patterns: [regExp.source]
-        }
+      arbitraryConstraint: {
+        patterns: [{ source: regExp.source, flags: regExp.flags }]
       },
       ...annotations
     }
@@ -7346,10 +7428,8 @@ export function isIncludes(includes: string, annotations?: Annotations.Filter) {
       },
       toJsonSchema: () => ({ pattern: regExp.source }),
       toCode: () => ({ runtime: `Schema.isIncludes(${format(includes)})` }),
-      arbitrary: {
-        constraint: {
-          patterns: [regExp.source]
-        }
+      arbitraryConstraint: {
+        patterns: [{ source: regExp.source, flags: regExp.flags }]
       },
       ...annotations
     }
@@ -7402,10 +7482,8 @@ export function isUppercased(annotations?: Annotations.Filter) {
       },
       toJsonSchema: () => ({ pattern: regExp.source }),
       toCode: () => ({ runtime: "Schema.isUppercased()" }),
-      arbitrary: {
-        constraint: {
-          patterns: [UPPERCASED_PATTERN]
-        }
+      arbitraryConstraint: {
+        patterns: [{ source: UPPERCASED_PATTERN, flags: "" }]
       },
       ...annotations
     }
@@ -7456,10 +7534,8 @@ export function isLowercased(annotations?: Annotations.Filter) {
       },
       toJsonSchema: () => ({ pattern: regExp.source }),
       toCode: () => ({ runtime: "Schema.isLowercased()" }),
-      arbitrary: {
-        constraint: {
-          patterns: [LOWERCASED_PATTERN]
-        }
+      arbitraryConstraint: {
+        patterns: [{ source: LOWERCASED_PATTERN, flags: "" }]
       },
       ...annotations
     }
@@ -7510,10 +7586,8 @@ export function isCapitalized(annotations?: Annotations.Filter) {
       },
       toJsonSchema: () => ({ pattern: regExp.source }),
       toCode: () => ({ runtime: "Schema.isCapitalized()" }),
-      arbitrary: {
-        constraint: {
-          patterns: [CAPITALIZED_PATTERN]
-        }
+      arbitraryConstraint: {
+        patterns: [{ source: CAPITALIZED_PATTERN, flags: "" }]
       },
       ...annotations
     }
@@ -7564,10 +7638,8 @@ export function isUncapitalized(annotations?: Annotations.Filter) {
       },
       toJsonSchema: () => ({ pattern: regExp.source }),
       toCode: () => ({ runtime: "Schema.isUncapitalized()" }),
-      arbitrary: {
-        constraint: {
-          patterns: [UNCAPITALIZED_PATTERN]
-        }
+      arbitraryConstraint: {
+        patterns: [{ source: UNCAPITALIZED_PATTERN, flags: "" }]
       },
       ...annotations
     }
@@ -7622,8 +7694,7 @@ export const Finite: Finite = make(SchemaAST.finite)
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies `noNaN: true` and
- * `noInfinity: true` constraints to ensure generated numbers are finite.
+ * During arbitrary generation, this applies a finite-number constraint.
  *
  * @category validation
  * @since 4.0.0
@@ -7667,14 +7738,10 @@ export function makeIsGreaterThan<T>(options: {
       (input) => gt(input, exclusiveMinimum),
       {
         expected: `a value greater than ${formatter(exclusiveMinimum)}`,
-        arbitrary: {
-          constraint: {
-            ordered: {
-              order: options.order,
-              minimum: exclusiveMinimum,
-              exclusiveMinimum: true
-            }
-          }
+        arbitraryConstraint: {
+          order: options.order,
+          minimum: exclusiveMinimum,
+          exclusiveMinimum: true
         },
         ...options.annotate?.(exclusiveMinimum),
         ...annotations
@@ -7702,13 +7769,9 @@ export function makeIsGreaterThanOrEqualTo<T>(options: {
       (input) => gte(input, minimum),
       {
         expected: `a value greater than or equal to ${formatter(minimum)}`,
-        arbitrary: {
-          constraint: {
-            ordered: {
-              order: options.order,
-              minimum
-            }
-          }
+        arbitraryConstraint: {
+          order: options.order,
+          minimum
         },
         ...options.annotate?.(minimum),
         ...annotations
@@ -7736,14 +7799,10 @@ export function makeIsLessThan<T>(options: {
       (input) => lt(input, exclusiveMaximum),
       {
         expected: `a value less than ${formatter(exclusiveMaximum)}`,
-        arbitrary: {
-          constraint: {
-            ordered: {
-              order: options.order,
-              maximum: exclusiveMaximum,
-              exclusiveMaximum: true
-            }
-          }
+        arbitraryConstraint: {
+          order: options.order,
+          maximum: exclusiveMaximum,
+          exclusiveMaximum: true
         },
         ...options.annotate?.(exclusiveMaximum),
         ...annotations
@@ -7771,13 +7830,9 @@ export function makeIsLessThanOrEqualTo<T>(options: {
       (input) => lte(input, maximum),
       {
         expected: `a value less than or equal to ${formatter(maximum)}`,
-        arbitrary: {
-          constraint: {
-            ordered: {
-              order: options.order,
-              maximum
-            }
-          }
+        arbitraryConstraint: {
+          order: options.order,
+          maximum
         },
         ...options.annotate?.(maximum),
         ...annotations
@@ -7824,16 +7879,12 @@ export function makeIsBetween<T>(deriveOptions: {
         expected: `a value between ${formatter(options.minimum)}${options.exclusiveMinimum ? " (excluded)" : ""} and ${
           formatter(options.maximum)
         }${options.exclusiveMaximum ? " (excluded)" : ""}`,
-        arbitrary: {
-          constraint: {
-            ordered: {
-              order: deriveOptions.order,
-              minimum: options.minimum,
-              maximum: options.maximum,
-              ...(options.exclusiveMinimum && { exclusiveMinimum: true }),
-              ...(options.exclusiveMaximum && { exclusiveMaximum: true })
-            }
-          }
+        arbitraryConstraint: {
+          order: deriveOptions.order,
+          minimum: options.minimum,
+          maximum: options.maximum,
+          ...(options.exclusiveMinimum && { exclusiveMinimum: true }),
+          ...(options.exclusiveMaximum && { exclusiveMaximum: true })
         },
         ...deriveOptions.annotate?.(options),
         ...annotations
@@ -7886,7 +7937,7 @@ function encodeNumberPayload(number: number): number {
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies an
+ * During arbitrary generation, this applies an
  * `exclusiveMinimum` constraint to ensure generated numbers are greater than
  * the specified value.
  *
@@ -7937,7 +7988,7 @@ export const isGreaterThanReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `minimum` constraint
+ * During arbitrary generation, this applies a `minimum` constraint
  * to ensure generated numbers are greater than or equal to the specified value.
  *
  * @category validation
@@ -7986,7 +8037,7 @@ export const isGreaterThanOrEqualToReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies an
+ * During arbitrary generation, this applies an
  * `exclusiveMaximum` constraint to ensure generated numbers are less than the
  * specified value.
  *
@@ -8037,7 +8088,7 @@ export const isLessThanReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `maximum` constraint
+ * During arbitrary generation, this applies a `maximum` constraint
  * to ensure generated numbers are less than or equal to the specified value.
  *
  * @category validation
@@ -8088,7 +8139,7 @@ export const isLessThanOrEqualToReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies `minimum` and
+ * During arbitrary generation, this applies `minimum` and
  * `maximum` constraints with optional `exclusiveMinimum` and
  * `exclusiveMaximum` flags to ensure generated numbers fall within the
  * specified range.
@@ -8162,11 +8213,6 @@ export const isBetweenReviver: SchemaRepresentation.FilterReviver<{
  *
  * This check corresponds to the `multipleOf` constraint in JSON Schema.
  *
- * Arbitrary:
- *
- * When generating test data with fast-check, this applies constraints to ensure
- * generated numbers are multiples of the specified divisor.
- *
  * @category validation
  * @since 4.0.0
  */
@@ -8216,8 +8262,7 @@ export const isMultipleOfReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies an `integer: true`
- * constraint to ensure generated numbers are integers.
+ * During arbitrary generation, this applies an integer constraint.
  *
  * @category validation
  * @since 4.0.0
@@ -8233,10 +8278,8 @@ export function isInt(annotations?: Annotations.Filter) {
       },
       toJsonSchema: () => ({ type: "integer" }),
       toCode: () => ({ runtime: "Schema.isInt()" }),
-      arbitrary: {
-        constraint: {
-          integer: true
-        }
+      arbitraryConstraint: {
+        number: "integer"
       },
       ...annotations
     }
@@ -8316,7 +8359,7 @@ export const Natural: Natural = Int.check(isGreaterThanOrEqualTo(0))
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies integer and range
+ * During arbitrary generation, this applies integer and range
  * constraints to ensure generated numbers are 32-bit signed integers.
  *
  * @category validation
@@ -8348,7 +8391,7 @@ export function isInt32(annotations?: Annotations.Filter) {
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies integer and range
+ * During arbitrary generation, this applies integer and range
  * constraints to ensure generated numbers are 32-bit unsigned integers.
  *
  * @category validation
@@ -8385,9 +8428,7 @@ function formatDateRuntime(date: globalThis.Date): string {
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `min` constraint of
- * one millisecond after the specified value to ensure generated Date objects are
- * greater than it.
+ * During arbitrary generation, this applies an exclusive lower bound.
  *
  * @category validation
  * @since 4.0.0
@@ -8420,9 +8461,7 @@ export const isGreaterThanDate = makeIsGreaterThan({
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `min` constraint
- * to ensure generated Date objects are greater than or equal to the specified
- * date.
+ * During arbitrary generation, this applies an inclusive lower bound.
  *
  * @category validation
  * @since 4.0.0
@@ -8449,9 +8488,7 @@ export const isGreaterThanOrEqualToDate = makeIsGreaterThanOrEqualTo({
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `max` constraint of
- * one millisecond before the specified value to ensure generated Date objects
- * are less than it.
+ * During arbitrary generation, this applies an exclusive upper bound.
  *
  * @category validation
  * @since 4.0.0
@@ -8484,9 +8521,7 @@ export const isLessThanDate = makeIsLessThan({
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `max` constraint
- * to ensure generated Date objects are less than or equal to the specified
- * date.
+ * During arbitrary generation, this applies an inclusive upper bound.
  *
  * @category validation
  * @since 4.0.0
@@ -8519,9 +8554,7 @@ export const isLessThanOrEqualToDate = makeIsLessThanOrEqualTo({
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies `min` and `max`
- * constraints to ensure generated Date objects fall within the specified range,
- * shifting exclusive bounds by one millisecond.
+ * During arbitrary generation, this applies the specified lower and upper bounds.
  *
  * @category validation
  * @since 4.0.0
@@ -8559,9 +8592,7 @@ export const isBetweenDate = makeIsBetween({
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `min` constraint of
- * `exclusiveMinimum + 1n` to ensure generated BigInts are greater than the
- * specified value.
+ * During arbitrary generation, this applies an exclusive lower bound.
  *
  * @category validation
  * @since 4.0.0
@@ -8589,9 +8620,7 @@ export const isGreaterThanBigInt = makeIsGreaterThan({
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `min` constraint
- * to ensure generated BigInt values are greater than or equal to the specified
- * value.
+ * During arbitrary generation, this applies an inclusive lower bound.
  *
  * @category validation
  * @since 4.0.0
@@ -8618,9 +8647,7 @@ export const isGreaterThanOrEqualToBigInt = makeIsGreaterThanOrEqualTo({
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `max` constraint of
- * `exclusiveMaximum - 1n` to ensure generated BigInts are less than the
- * specified value.
+ * During arbitrary generation, this applies an exclusive upper bound.
  *
  * @category validation
  * @since 4.0.0
@@ -8648,9 +8675,7 @@ export const isLessThanBigInt = makeIsLessThan({
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `max` constraint
- * to ensure generated BigInt values are less than or equal to the specified
- * value.
+ * During arbitrary generation, this applies an inclusive upper bound.
  *
  * @category validation
  * @since 4.0.0
@@ -8678,9 +8703,7 @@ export const isLessThanOrEqualToBigInt = makeIsLessThanOrEqualTo({
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies `min` and `max`
- * constraints to ensure generated BigInt values fall within the specified
- * range.
+ * During arbitrary generation, this applies the specified lower and upper bounds.
  *
  * @category validation
  * @since 4.0.0
@@ -8786,7 +8809,7 @@ export const isBetweenBigDecimal = makeIsBetween({
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `minLength`
+ * During arbitrary generation, this applies a `minLength`
  * constraint to ensure generated strings or arrays have at least the required
  * length.
  *
@@ -8817,10 +8840,8 @@ export function isMinLength(minLength: number, annotations?: Annotations.Filter)
       toJsonSchema: ({ type }) => type === "array" ? { minItems: minLength } : { minLength },
       toCode: () => ({ runtime: `Schema.isMinLength(${minLength})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        constraint: {
-          minLength
-        }
+      arbitraryConstraint: {
+        minLength
       },
       ...annotations
     }
@@ -8860,7 +8881,7 @@ export const isMinLengthReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `minLength: 1`
+ * During arbitrary generation, this applies a `minLength: 1`
  * constraint to ensure generated strings or arrays are non-empty.
  *
  * @category validation
@@ -8883,7 +8904,7 @@ export function isNonEmpty(annotations?: Annotations.Filter) {
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a `maxLength`
+ * During arbitrary generation, this applies a `maxLength`
  * constraint to ensure generated strings or arrays have at most the required
  * length.
  *
@@ -8903,10 +8924,8 @@ export function isMaxLength(maxLength: number, annotations?: Annotations.Filter)
       toJsonSchema: ({ type }) => type === "array" ? { maxItems: maxLength } : { maxLength },
       toCode: () => ({ runtime: `Schema.isMaxLength(${maxLength})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        constraint: {
-          maxLength
-        }
+      arbitraryConstraint: {
+        maxLength
       },
       ...annotations
     }
@@ -8946,7 +8965,7 @@ export const isMaxLengthReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies `minLength` and
+ * During arbitrary generation, this applies `minLength` and
  * `maxLength` constraints to ensure generated strings or arrays have a length
  * within the specified range.
  *
@@ -8973,11 +8992,9 @@ export function isLengthBetween(minimum: number, maximum: number, annotations?: 
           : { allOf: [{ minLength: minimum }, { maxLength: maximum }] },
       toCode: () => ({ runtime: `Schema.isLengthBetween(${minimum}, ${maximum})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        constraint: {
-          minLength: minimum,
-          maxLength: maximum
-        }
+      arbitraryConstraint: {
+        minLength: minimum,
+        maxLength: maximum
       },
       ...annotations
     }
@@ -9018,9 +9035,7 @@ export const isLengthBetweenReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a node-local
- * `minLength` constraint. Generators for values with a final `.size`, such as
- * sets and maps, interpret it as final cardinality.
+ * During arbitrary generation, this applies a node-local `minSize` constraint.
  *
  * @category validation
  * @since 4.0.0
@@ -9038,10 +9053,8 @@ export function isMinSize(minSize: number, annotations?: Annotations.Filter) {
       toJsonSchema: () => ({}),
       toCode: () => ({ runtime: `Schema.isMinSize(${minSize})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        constraint: {
-          minLength: minSize
-        }
+      arbitraryConstraint: {
+        minSize
       },
       ...annotations
     }
@@ -9081,9 +9094,7 @@ export const isMinSizeReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a node-local
- * `maxLength` constraint. Generators for values with a final `.size`, such as
- * sets and maps, interpret it as final cardinality.
+ * During arbitrary generation, this applies a node-local `maxSize` constraint.
  *
  * @category validation
  * @since 4.0.0
@@ -9101,10 +9112,8 @@ export function isMaxSize(maxSize: number, annotations?: Annotations.Filter) {
       toJsonSchema: () => ({}),
       toCode: () => ({ runtime: `Schema.isMaxSize(${maxSize})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        constraint: {
-          maxLength: maxSize
-        }
+      arbitraryConstraint: {
+        maxSize
       },
       ...annotations
     }
@@ -9144,9 +9153,7 @@ export const isMaxSizeReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies node-local
- * `minLength` and `maxLength` constraints. Generators for values with a final
- * `.size`, such as sets and maps, interpret them as final cardinality.
+ * During arbitrary generation, this applies node-local `minSize` and `maxSize` constraints.
  *
  * @category validation
  * @since 4.0.0
@@ -9168,11 +9175,9 @@ export function isSizeBetween(minimum: number, maximum: number, annotations?: An
       toJsonSchema: () => ({}),
       toCode: () => ({ runtime: `Schema.isSizeBetween(${minimum}, ${maximum})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        constraint: {
-          minLength: minimum,
-          maxLength: maximum
-        }
+      arbitraryConstraint: {
+        minSize: minimum,
+        maxSize: maximum
       },
       ...annotations
     }
@@ -9213,9 +9218,7 @@ export const isSizeBetweenReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a node-local
- * `minLength` constraint. Object generators interpret it as the final number
- * of own properties.
+ * During arbitrary generation, this applies a node-local `minProperties` constraint.
  *
  * @category validation
  * @since 4.0.0
@@ -9233,10 +9236,8 @@ export function isMinProperties(minProperties: number, annotations?: Annotations
       toJsonSchema: () => ({ minProperties }),
       toCode: () => ({ runtime: `Schema.isMinProperties(${minProperties})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        constraint: {
-          minLength: minProperties
-        }
+      arbitraryConstraint: {
+        minProperties
       },
       ...annotations
     }
@@ -9275,9 +9276,7 @@ export const isMinPropertiesReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies a node-local
- * `maxLength` constraint. Object generators interpret it as the final number
- * of own properties.
+ * During arbitrary generation, this applies a node-local `maxProperties` constraint.
  *
  * @category validation
  * @since 4.0.0
@@ -9295,10 +9294,8 @@ export function isMaxProperties(maxProperties: number, annotations?: Annotations
       toJsonSchema: () => ({ maxProperties }),
       toCode: () => ({ runtime: `Schema.isMaxProperties(${maxProperties})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        constraint: {
-          maxLength: maxProperties
-        }
+      arbitraryConstraint: {
+        maxProperties
       },
       ...annotations
     }
@@ -9338,9 +9335,7 @@ export const isMaxPropertiesReviver: SchemaRepresentation.FilterReviver<{
  *
  * Arbitrary:
  *
- * When generating test data with fast-check, this applies node-local
- * `minLength` and `maxLength` constraints. Object generators interpret them as
- * the final number of own properties.
+ * During arbitrary generation, this applies node-local `minProperties` and `maxProperties` constraints.
  *
  * @category validation
  * @since 4.0.0
@@ -9362,11 +9357,9 @@ export function isPropertiesLengthBetween(minimum: number, maximum: number, anno
       toJsonSchema: () => ({ minProperties: minimum, maxProperties: maximum }),
       toCode: () => ({ runtime: `Schema.isPropertiesLengthBetween(${minimum}, ${maximum})` }),
       [InternalAnnotations.STRUCTURAL_ANNOTATION_KEY]: true,
-      arbitrary: {
-        constraint: {
-          minLength: minimum,
-          maxLength: maximum
-        }
+      arbitraryConstraint: {
+        minProperties: minimum,
+        maxProperties: maximum
       },
       ...annotations
     }
@@ -9471,9 +9464,8 @@ export const isPropertyNamesReviver: SchemaRepresentation.FilterReviver<null> = 
  * This check corresponds to the `uniqueItems: true` constraint in JSON Schema.
  *
  * Arbitrary:
- * When generating test data with fast-check, this applies a node-local
- * `unique: true` constraint. Array generators translate it to `fast-check`
- * `uniqueArray` using Effect equality.
+ * During arbitrary generation, this applies a node-local identity selector
+ * for constructive uniqueness using Effect equality.
  *
  * @category validation
  * @since 4.0.0
@@ -9489,10 +9481,8 @@ export function isUnique<T>(annotations?: Annotations.Filter) {
       },
       toJsonSchema: () => ({ uniqueItems: true }),
       toCode: () => ({ runtime: "Schema.isUnique()" }),
-      arbitrary: {
-        constraint: {
-          unique: true
-        }
+      arbitraryConstraint: {
+        uniqueBy: identity
       },
       ...annotations
     }
@@ -9515,6 +9505,56 @@ export const isUniqueReviver: SchemaRepresentation.FilterReviver<null> = Interna
   "effect/schema/isUnique",
   Null,
   ({ annotations }) => isUnique(annotations)
+)
+
+/**
+ * Validates that all first elements in an array of key-value tuples are unique according to Effect equality.
+ *
+ * **Details**
+ *
+ * Arbitrary:
+ * During arbitrary generation, this projects each entry to its key for constructive uniqueness.
+ *
+ * JSON Schema:
+ * JSON Schema has no equivalent constraint, so this check is omitted from generated documents.
+ *
+ * @see {@link isUnique} for validating uniqueness of complete array elements
+ * @category validation
+ * @since 4.0.0
+ */
+export function isUniqueKey<Key, Value>(annotations?: Annotations.Filter) {
+  return makeFilter<ReadonlyArray<readonly [Key, Value]>>(
+    (input) => Arr.dedupe(input.map(([key]) => key)).length === input.length,
+    {
+      expected: "an array with unique keys",
+      representation: {
+        id: "effect/schema/isUniqueKey",
+        payload: null
+      },
+      toCode: () => ({ runtime: "Schema.isUniqueKey()" }),
+      arbitraryConstraint: {
+        uniqueBy: (entry: readonly [Key, Value]) => entry[0]
+      },
+      ...annotations
+    }
+  )
+}
+
+/**
+ * Reviver for persisted `isUniqueKey` checks.
+ *
+ * **When to use**
+ *
+ * Use when reconstructing documents that may contain checks created by {@link isUniqueKey}.
+ *
+ * @see {@link isUniqueKey} for creating the corresponding check
+ * @category validation
+ * @since 4.0.0
+ */
+export const isUniqueKeyReviver: SchemaRepresentation.FilterReviver<null> = InternalSchema.makeFilterReviver(
+  "effect/schema/isUniqueKey",
+  Null,
+  ({ annotations }) => isUniqueKey(annotations)
 )
 
 // -----------------------------------------------------------------------------
@@ -9653,21 +9693,7 @@ export function Option<A extends Constraint>(value: A): Option<A> {
             decode: (e) => e._tag === "None" ? Option_.none() : Option_.some(e.value),
             encode: (o) => (Option_.isSome(o) ? { _tag: "Some", value: o.value } as const : { _tag: "None" } as const)
           })
-        ),
-      toArbitrary: ([value]) => (fc, ctx) => {
-        const terminal = fc.constant(Option_.none())
-        const arbitrary = fc.oneof(
-          terminal,
-          value.arbitrary.map(Option_.some)
         )
-        return withRecursion(fc, ctx, terminal, arbitrary)
-      },
-      toEquivalence: ([value]) => Option_.makeEquivalence(value),
-      toFormatter: ([value]) =>
-        Option_.match({
-          onNone: () => "none()",
-          onSome: (t) => `some(${value(t)})`
-        })
     }
   )
   return make(schema.ast, { value })
@@ -9983,25 +10009,7 @@ export function Result<A extends Constraint, E extends Constraint>(
                 ? { _tag: "Success", success: r.success } as const
                 : { _tag: "Failure", failure: r.failure } as const
           })
-        ),
-      toArbitrary: ([success, failure]) => (fc, ctx) => {
-        const terminal = oneOfArbitraries(
-          fc,
-          success.terminal?.map((a): Result_.Result<A["Type"], E["Type"]> => Result_.succeed(a)),
-          failure.terminal?.map((e): Result_.Result<A["Type"], E["Type"]> => Result_.fail(e))
         )
-        const arbitrary = fc.oneof(
-          success.arbitrary.map((a): Result_.Result<A["Type"], E["Type"]> => Result_.succeed(a)),
-          failure.arbitrary.map((e): Result_.Result<A["Type"], E["Type"]> => Result_.fail(e))
-        )
-        return withRecursion(fc, ctx, terminal, arbitrary)
-      },
-      toEquivalence: ([success, failure]) => Result_.makeEquivalence(success, failure),
-      toFormatter: ([success, failure]) =>
-        Result_.match({
-          onSuccess: (t) => `success(${success(t)})`,
-          onFailure: (t) => `failure(${failure(t)})`
-        })
     }
   )
   return make(schema.ast, { success, failure })
@@ -10170,11 +10178,6 @@ export function Redacted<S extends Constraint>(value: S, options?: {
               SchemaGetter.transform(Redacted_.value)
           }
         ),
-      toArbitrary: ([value]) => () => ({
-        arbitrary: value.arbitrary.map((a) => Redacted_.make(a, { label })),
-        terminal: value.terminal?.map((a) => Redacted_.make(a, { label }))
-      }),
-      toFormatter: () => globalThis.String,
       toEquivalence: ([value]) => Redacted_.makeEquivalence(value)
     }
   )
@@ -10362,10 +10365,7 @@ export function CauseReason<E extends Constraint, D extends Constraint>(error: E
             },
             encode: identity
           })
-        ),
-      toArbitrary: ([error, defect]) => causeReasonToArbitrary(error, defect),
-      toEquivalence: ([error, defect]) => causeReasonToEquivalence(error, defect),
-      toFormatter: ([error, defect]) => causeReasonToFormatter(error, defect)
+        )
     }
   )
   return make(schema.ast, { error, defect })
@@ -10391,36 +10391,6 @@ export const CauseReasonReviver = InternalSchema.makeDeclarationReviver(
     return annotations === undefined ? schema : schema.annotate(annotations)
   }
 )
-
-function causeReasonToArbitrary<E, D>(
-  error: Annotations.ToArbitrary.TypeParameter<E>,
-  defect: Annotations.ToArbitrary.TypeParameter<D>
-) {
-  return (fc: typeof FastCheck, ctx: Annotations.ToArbitrary.Context) => {
-    const terminal = fc.constant(Cause_.makeInterruptReason())
-    const arbitrary = fc.oneof(
-      terminal,
-      fc.integer({ min: 1 }).map(Cause_.makeInterruptReason),
-      error.arbitrary.map((e) => Cause_.makeFailReason(e)),
-      defect.arbitrary.map((d) => Cause_.makeDieReason(d))
-    )
-    return withRecursion(fc, ctx, terminal, arbitrary)
-  }
-}
-
-function causeReasonToEquivalence<E>(error: Equivalence.Equivalence<E>, defect: Equivalence.Equivalence<unknown>) {
-  return (a: Cause_.Reason<E>, b: Cause_.Reason<E>) => {
-    if (a._tag !== b._tag) return false
-    switch (a._tag) {
-      case "Fail":
-        return error(a.error, (b as Cause_.Fail<E>).error)
-      case "Die":
-        return defect(a.defect, (b as Cause_.Die).defect)
-      case "Interrupt":
-        return a.fiberId === (b as Cause_.Interrupt).fiberId
-    }
-  }
-}
 
 function causeReasonToFormatter<E>(error: Formatter<E>, defect: Formatter<unknown>) {
   return (t: Cause_.Reason<E>) => {
@@ -10525,10 +10495,7 @@ export function Cause<E extends Constraint, D extends Constraint>(error: E, defe
             decode: Cause_.fromReasons,
             encode: ({ reasons: failures }) => failures
           })
-        ),
-      toArbitrary: ([error, defect]) => causeToArbitrary(error, defect),
-      toEquivalence: ([error, defect]) => causeToEquivalence(error, defect),
-      toFormatter: ([error, defect]) => causeToFormatter(error, defect)
+        )
     }
   )
   return make(schema.ast, { error, defect })
@@ -10554,23 +10521,6 @@ export const CauseReviver = InternalSchema.makeDeclarationReviver(
     return annotations === undefined ? schema : schema.annotate(annotations)
   }
 )
-
-function causeToArbitrary<E, D>(
-  error: Annotations.ToArbitrary.TypeParameter<E>,
-  defect: Annotations.ToArbitrary.TypeParameter<D>
-) {
-  return (fc: typeof FastCheck, ctx: Annotations.ToArbitrary.Context) => {
-    const reason = causeReasonToArbitrary(error, defect)(fc, ctx)
-    const terminal = fc.constant(Cause_.empty)
-    const arbitrary = fc.array(reason.arbitrary).map(Cause_.fromReasons)
-    return withRecursion(fc, ctx, terminal, arbitrary)
-  }
-}
-
-function causeToEquivalence<E>(error: Equivalence.Equivalence<E>, defect: Equivalence.Equivalence<unknown>) {
-  const failures = Equivalence.Array(causeReasonToEquivalence(error, defect))
-  return (a: Cause_.Cause<E>, b: Cause_.Cause<E>) => failures(a.reasons, b.reasons)
-}
 
 function causeToFormatter<E>(error: Formatter<E>, defect: Formatter<unknown>) {
   const causeReason = causeReasonToFormatter(error, defect)
@@ -10687,8 +10637,7 @@ export function ErrorInstance(options?: ErrorOptions): ErrorInstance {
       Type: `globalThis.Error`
     }),
     expected: "Error",
-    toCodecJson: () => link<globalThis.Error>()(JsonError, SchemaTransformation.errorFromJsonError(normalizedOptions)),
-    toArbitrary: () => (fc) => fc.string().map((message) => new globalThis.Error(message))
+    toCodecJson: () => link<globalThis.Error>()(JsonError, SchemaTransformation.errorFromJsonError(normalizedOptions))
   })
   errorSchemaCache[key] = schema
   return schema
@@ -10894,43 +10843,7 @@ export function Exit<A extends Constraint, E extends Constraint, D extends Const
                 ? { _tag: "Success", value: exit.value } as const
                 : { _tag: "Failure", cause: exit.cause } as const
           })
-        ),
-      toArbitrary: ([value, error, defect]) => (fc, ctx) => {
-        const cause = causeToArbitrary(error, defect)(fc, ctx)
-        const terminal = oneOfArbitraries(
-          fc,
-          value.terminal?.map((v): Exit_.Exit<A["Type"], E["Type"]> => Exit_.succeed(v)),
-          cause.terminal?.map((cause): Exit_.Exit<A["Type"], E["Type"]> => Exit_.failCause(cause))
         )
-        const arbitrary = fc.oneof(
-          value.arbitrary.map((v): Exit_.Exit<A["Type"], E["Type"]> => Exit_.succeed(v)),
-          cause.arbitrary.map((cause): Exit_.Exit<A["Type"], E["Type"]> => Exit_.failCause(cause))
-        )
-        return withRecursion(fc, ctx, terminal, arbitrary)
-      },
-      toEquivalence: ([value, error, defect]) => {
-        const cause = causeToEquivalence(error, defect)
-        return (a, b) => {
-          if (a._tag !== b._tag) return false
-          switch (a._tag) {
-            case "Success":
-              return value(a.value, (b as Exit_.Success<A["Type"]>).value)
-            case "Failure":
-              return cause(a.cause, (b as Exit_.Failure<E["Type"], D["Type"]>).cause)
-          }
-        }
-      },
-      toFormatter: ([value, error, defect]) => {
-        const cause = causeToFormatter(error, defect)
-        return (t) => {
-          switch (t._tag) {
-            case "Success":
-              return `Exit.Success(${value(t.value)})`
-            case "Failure":
-              return `Exit.Failure(${cause(t.cause)})`
-          }
-        }
-      }
     }
   )
   return make(schema.ast, { value, error, defect })
@@ -10956,6 +10869,50 @@ export const ExitReviver = InternalSchema.makeDeclarationReviver(
     return annotations === undefined ? schema : schema.annotate(annotations)
   }
 )
+
+/** @internal */
+export function withArrayLengthConstraints<Item extends Constraint>(
+  self: $Array<Item>,
+  minimum: number | undefined,
+  maximum: number | undefined
+): $Array<Item> {
+  if (minimum !== undefined && maximum !== undefined) {
+    return self.check(isLengthBetween(minimum, maximum))
+  }
+  if (minimum !== undefined) return self.check(isMinLength(minimum))
+  if (maximum !== undefined) return self.check(isMaxLength(maximum))
+  return self
+}
+
+function hashMapLink<Key, Value>(entries: Schema<ReadonlyArray<readonly [Key, Value]>>) {
+  return link<HashMap_.HashMap<Key, Value>>()(
+    entries,
+    SchemaTransformation.transform({
+      decode: HashMap_.fromIterable,
+      encode: HashMap_.toEntries
+    })
+  )
+}
+
+function hashSetLink<Value>(values: Schema<ReadonlyArray<Value>>) {
+  return link<HashSet_.HashSet<Value>>()(
+    values,
+    SchemaTransformation.transform({
+      decode: HashSet_.fromIterable,
+      encode: Arr.fromIterable
+    })
+  )
+}
+
+function chunkLink<Value>(values: Schema<ReadonlyArray<Value>>) {
+  return link<Chunk_.Chunk<Value>>()(
+    values,
+    SchemaTransformation.transform({
+      decode: Chunk_.fromIterable,
+      encode: Arr.fromIterable
+    })
+  )
+}
 
 /**
  * Type-level representation returned by {@link ReadonlyMap}.
@@ -10986,96 +10943,6 @@ export interface $ReadonlyMap<Key extends Constraint, Value extends Constraint> 
 export type ReadonlyMapIso<Key extends Constraint, Value extends Constraint> = ReadonlyArray<
   readonly [Key["Iso"], Value["Iso"]]
 >
-
-function oneOfArbitraries<T>(
-  fc: typeof FastCheck,
-  a: FastCheck.Arbitrary<T> | undefined,
-  b: FastCheck.Arbitrary<T> | undefined
-) {
-  return a === undefined ? b : b === undefined ? a : fc.oneof(a, b)
-}
-
-function withRecursion<T>(
-  fc: typeof FastCheck,
-  ctx: Annotations.ToArbitrary.Context,
-  terminal: FastCheck.Arbitrary<T> | undefined,
-  arbitrary: FastCheck.Arbitrary<T>
-) {
-  return {
-    arbitrary: terminal === undefined || ctx.recursion === undefined
-      ? arbitrary
-      : fc.oneof(ctx.recursion, terminal, arbitrary),
-    terminal
-  }
-}
-
-function arrayFromItems<T>(
-  fc: typeof FastCheck,
-  item: FastCheck.Arbitrary<T>,
-  constraints: FastCheck.ArrayConstraints | undefined,
-  comparator?: ((a: T, b: T) => boolean) | undefined
-) {
-  return comparator === undefined
-    ? fc.array(item, constraints)
-    : fc.uniqueArray(item, { ...constraints, comparator })
-}
-
-function collectionArbitrary<T, Out>(
-  fc: typeof FastCheck,
-  ctx: Annotations.ToArbitrary.Context,
-  item: FastCheck.Arbitrary<T>,
-  terminalItem: FastCheck.Arbitrary<T> | undefined,
-  fromIterable: (items: Array<T>) => Out,
-  comparator?: ((a: T, b: T) => boolean) | undefined
-) {
-  const constraint = ctx.constraint
-  const constraints = constraint === undefined ||
-      (constraint.minLength === undefined && constraint.maxLength === undefined)
-    ? undefined
-    : {
-      ...(constraint.minLength !== undefined ? { minLength: constraint.minLength } : {}),
-      ...(constraint.maxLength !== undefined ? { maxLength: constraint.maxLength } : {})
-    }
-  if (
-    constraints?.minLength !== undefined && constraints.maxLength !== undefined &&
-    constraints.minLength > constraints.maxLength
-  ) {
-    throw new globalThis.Error("Unable to derive an arbitrary for size constraints")
-  }
-  const minLength = constraints?.minLength ?? 0
-  const terminal = minLength === 0
-    ? fc.constant<Array<T>>([])
-    : terminalItem === undefined
-    ? undefined
-    : arrayFromItems(fc, terminalItem, { ...constraints, maxLength: minLength }, comparator)
-  const arrays = withRecursion(
-    fc,
-    ctx,
-    terminal,
-    arrayFromItems(fc, item, constraints, comparator)
-  )
-  return {
-    arbitrary: arrays.arbitrary.map(fromIterable),
-    terminal: arrays.terminal?.map(fromIterable)
-  }
-}
-
-function entriesArbitrary<K, V, Out>(
-  fc: typeof FastCheck,
-  ctx: Annotations.ToArbitrary.Context,
-  key: Annotations.ToArbitrary.TypeParameter<K>,
-  value: Annotations.ToArbitrary.TypeParameter<V>,
-  fromIterable: (items: Array<[K, V]>) => Out
-) {
-  return collectionArbitrary(
-    fc,
-    ctx,
-    fc.tuple(key.arbitrary, value.arbitrary),
-    key.terminal === undefined || value.terminal === undefined ? undefined : fc.tuple(key.terminal, value.terminal),
-    fromIterable,
-    ([a], [b]) => Equal.equals(a, b)
-  )
-}
 
 /**
  * Schema for readonly maps whose keys and values conform to the provided
@@ -11123,20 +10990,10 @@ export function ReadonlyMap<Key extends Constraint, Value extends Constraint>(
         link<globalThis.Map<Key["Encoded"], Value["Encoded"]>>()(
           ArraySchema(Tuple([key, value])),
           SchemaTransformation.transform({
-            decode: (e) => new globalThis.Map(e),
+            decode: (entries) => new globalThis.Map(entries),
             encode: (map) => [...map.entries()]
           })
-        ),
-      toArbitrary: ([key, value]) => (fc, ctx) => entriesArbitrary(fc, ctx, key, value, (as) => new globalThis.Map(as)),
-      toEquivalence: ([key, value]) => Equal.makeCompareMap(key, value),
-      toFormatter: ([key, value]) => (t) => {
-        const size = t.size
-        if (size === 0) {
-          return "ReadonlyMap(0) {}"
-        }
-        const entries = globalThis.Array.from(t.entries()).sort().map(([k, v]) => `${key(k)} => ${value(v)}`)
-        return `ReadonlyMap(${size}) { ${entries.join(", ")} }`
-      }
+        )
     }
   )
   return make(schema.ast, { key, value })
@@ -11306,28 +11163,39 @@ function graphToEquivalence<N, E, T extends Graph_.Kind>(
   }
 }
 
+type GraphArbitraryRepresentation<N, E> = null | {
+  readonly nodes: readonly [N, ...Array<N>]
+  readonly edges: ReadonlyArray<readonly [source: number, target: number, data: E]>
+}
+
 function graphToArbitrary<N, E, T extends Graph_.Kind>(
   type: T,
-  node: Annotations.ToArbitrary.TypeParameter<N>,
-  edge: Annotations.ToArbitrary.TypeParameter<E>
+  node: Codec<N>,
+  edge: Codec<E>
 ) {
-  return (fc: typeof FastCheck, ctx: Annotations.ToArbitrary.Context) => {
-    const empty = InternalGraph.hydrate<N, E, T>({ type, nodes: [], edges: [] })
-    const terminal = fc.constant(empty)
-    const arbitrary = fc.array(node.arbitrary).chain((values) => {
-      const nodes = values.map((data, index) => ({ index, data }))
-      if (nodes.length === 0) return terminal
-      const endpoint = fc.integer({ min: 0, max: nodes.length - 1 })
-      return fc.array(fc.tuple(endpoint, endpoint, edge.arbitrary)).map((values) =>
-        InternalGraph.hydrate({
-          type,
-          nodes,
-          edges: values.map(([source, target, data], index) => ({ index, source, target, data }))
-        })
-      )
+  return linkDecoding<Graph_.Graph<N, E, T>>()(
+    Union([
+      Null,
+      Struct({
+        nodes: NonEmptyArray(node),
+        edges: ArraySchema(Tuple([Natural, Natural, edge]))
+      })
+    ]),
+    SchemaGetter.transform<Graph_.Graph<N, E, T>, GraphArbitraryRepresentation<N, E>>((input) => {
+      if (input === null) return InternalGraph.hydrate({ type, nodes: [], edges: [] })
+      const nodes = input.nodes.map((data, index) => ({ index, data }))
+      return InternalGraph.hydrate({
+        type,
+        nodes,
+        edges: input.edges.map(([source, target, data], index) => ({
+          index,
+          source: source % nodes.length,
+          target: target % nodes.length,
+          data
+        }))
+      })
     })
-    return withRecursion(fc, ctx, terminal, arbitrary)
-  }
+  )
 }
 
 /**
@@ -11418,9 +11286,8 @@ export function Graph<T extends Graph_.Kind, Node extends Constraint, Edge exten
             encode: (graph, options) => graphEncode(graph, type, options)
           })
         ),
-      toArbitrary: ([node, edge]) => graphToArbitrary(type, node, edge),
-      toEquivalence: ([node, edge]) => graphToEquivalence(node, edge),
-      toFormatter: () => globalThis.String
+      toCodecArbitrary: ({ typeParameters: [node, edge] }) => graphToArbitrary(type, node, edge),
+      toEquivalence: ([node, edge]) => graphToEquivalence(node, edge)
     }
   )
   return make(schema.ast, { type, node, edge })
@@ -11510,24 +11377,16 @@ export function HashMap<Key extends Constraint, Value extends Constraint>(key: K
         importDeclarations: [`import * as HashMap from "effect/HashMap"`]
       }),
       expected: "HashMap",
-      toCodec: ([key, value]) =>
-        link<HashMap_.HashMap<Key["Encoded"], Value["Encoded"]>>()(
-          ArraySchema(Tuple([key, value])),
-          SchemaTransformation.transform({
-            decode: HashMap_.fromIterable,
-            encode: HashMap_.toEntries
-          })
+      toCodec: ([key, value]) => hashMapLink(ArraySchema(Tuple([key, value]))),
+      toCodecArbitrary: ({ constraint, typeParameters: [key, value] }) =>
+        hashMapLink(
+          withArrayLengthConstraints(
+            ArraySchema(Tuple([key, value])).check(isUniqueKey()),
+            constraint?.minSize,
+            constraint?.maxSize
+          )
         ),
-      toArbitrary: ([key, value]) => (fc, ctx) => entriesArbitrary(fc, ctx, key, value, HashMap_.fromIterable),
-      toEquivalence: ([key, value]) => Equal.makeCompareMap(key, value),
-      toFormatter: ([key, value]) => (t) => {
-        const size = HashMap_.size(t)
-        if (size === 0) {
-          return "HashMap(0) {}"
-        }
-        const entries = HashMap_.toEntries(t).sort().map(([k, v]) => `${key(k)} => ${value(v)}`)
-        return `HashMap(${size}) { ${entries.join(", ")} }`
-      }
+      toEquivalence: ([key, value]) => Equal.makeCompareMap(key, value)
     }
   )
   return make(schema.ast, { key, value })
@@ -11623,21 +11482,10 @@ export function ReadonlySet<Value extends Constraint>(value: Value): $ReadonlySe
         link<globalThis.Set<Value["Encoded"]>>()(
           ArraySchema(value),
           SchemaTransformation.transform({
-            decode: (e) => new globalThis.Set(e),
+            decode: (values) => new globalThis.Set(values),
             encode: (set) => [...set.values()]
           })
-        ),
-      toArbitrary: ([value]) => (fc, ctx) =>
-        collectionArbitrary(fc, ctx, value.arbitrary, value.terminal, (as) => new globalThis.Set(as), Equal.equals),
-      toEquivalence: ([value]) => Equal.makeCompareSet(value),
-      toFormatter: ([value]) => (t) => {
-        const size = t.size
-        if (size === 0) {
-          return "ReadonlySet(0) {}"
-        }
-        const values = globalThis.Array.from(t.values()).sort().map((v) => `${value(v)}`)
-        return `ReadonlySet(${size}) { ${values.join(", ")} }`
-      }
+        )
     }
   )
   return make(schema.ast, { value })
@@ -11729,25 +11577,16 @@ export function HashSet<Value extends Constraint>(value: Value): HashSet<Value> 
         Type: `HashSet.HashSet<${typeParameters[0].Type}>`
       }),
       expected: "HashSet",
-      toCodec: ([value]) =>
-        link<HashSet_.HashSet<Value["Encoded"]>>()(
-          ArraySchema(value),
-          SchemaTransformation.transform({
-            decode: HashSet_.fromIterable,
-            encode: Arr.fromIterable
-          })
+      toCodec: ([value]) => hashSetLink(ArraySchema(value)),
+      toCodecArbitrary: ({ constraint, typeParameters: [value] }) =>
+        hashSetLink(
+          withArrayLengthConstraints(
+            ArraySchema(value).check(isUnique()),
+            constraint?.minSize,
+            constraint?.maxSize
+          )
         ),
-      toArbitrary: ([value]) => (fc, ctx) =>
-        collectionArbitrary(fc, ctx, value.arbitrary, value.terminal, HashSet_.fromIterable, Equal.equals),
-      toEquivalence: ([value]) => Equal.makeCompareSet(value),
-      toFormatter: ([value]) => (t) => {
-        const size = HashSet_.size(t)
-        if (size === 0) {
-          return "HashSet(0) {}"
-        }
-        const values = globalThis.Array.from(t).sort().map((v) => `${value(v)}`)
-        return `HashSet(${size}) { ${values.join(", ")} }`
-      }
+      toEquivalence: ([value]) => Equal.makeCompareSet(value)
     }
   )
   return make(schema.ast, { value })
@@ -11846,25 +11685,16 @@ export function Chunk<Value extends Constraint>(value: Value): Chunk<Value> {
         Type: `Chunk.Chunk<${typeParameters[0].Type}>`
       }),
       expected: "Chunk",
-      toCodec: ([value]) =>
-        link<Chunk_.Chunk<Value["Encoded"]>>()(
-          ArraySchema(value),
-          SchemaTransformation.transform({
-            decode: Chunk_.fromIterable,
-            encode: Arr.fromIterable
-          })
+      toCodec: ([value]) => chunkLink(ArraySchema(value)),
+      toCodecArbitrary: ({ constraint, typeParameters: [value] }) =>
+        chunkLink(
+          withArrayLengthConstraints(
+            ArraySchema(value),
+            constraint?.minLength,
+            constraint?.maxLength
+          )
         ),
-      toArbitrary: ([value]) => (fc, ctx) =>
-        collectionArbitrary(fc, ctx, value.arbitrary, value.terminal, Chunk_.fromIterable),
-      toEquivalence: ([value]) => Chunk_.makeEquivalence(value),
-      toFormatter: ([value]) => (t) => {
-        const size = Chunk_.size(t)
-        if (size === 0) {
-          return "Chunk(0) {}"
-        }
-        const values = globalThis.Array.from(t).sort().map((v) => `${value(v)}`)
-        return `Chunk(${size}) { ${values.join(", ")} }`
-      }
+      toEquivalence: ([value]) => Chunk_.makeEquivalence(value)
     }
   )
   return make(schema.ast, { value })
@@ -11946,30 +11776,7 @@ export const RegExp: RegExp = instanceOf(
               flags: regExp.flags
             })
         })
-      ),
-    toArbitrary: () => (fc) =>
-      fc
-        .tuple(
-          fc.constantFrom(
-            ".",
-            ".*",
-            "\\d+",
-            "\\w+",
-            "[a-z]+",
-            "[A-Z]+",
-            "[0-9]+",
-            "^[a-zA-Z0-9]+$",
-            "^\\d{4}-\\d{2}-\\d{2}$" // date pattern
-          ),
-          fc
-            .uniqueArray(fc.constantFrom("g", "i", "m", "s", "u", "y"), {
-              minLength: 0,
-              maxLength: 6
-            })
-            .map((flags) => flags.join(""))
-        )
-        .map(([source, flags]) => new globalThis.RegExp(source, flags)),
-    toEquivalence: () => (a, b) => a.source === b.source && a.flags === b.flags
+      )
   }
 )
 
@@ -12030,9 +11837,7 @@ export const URL: URL = instanceOf(
       link<globalThis.URL>()(
         URLString,
         SchemaTransformation.urlFromString
-      ),
-    toArbitrary: () => (fc) => fc.webUrl().map((s) => new globalThis.URL(s)),
-    toEquivalence: () => (a, b) => a.toString() === b.toString()
+      )
   }
 )
 
@@ -12089,31 +11894,7 @@ export interface Date extends declare<globalThis.Date> {
   readonly "Rebuild": Date
 }
 
-function dateArbitraryConstraints<T = globalThis.Date>(
-  ordered: Annotations.ToArbitrary.OrderedConstraint<T> | undefined,
-  base?: FastCheck.DateConstraints | undefined,
-  toDate?: (value: T) => globalThis.Date
-): FastCheck.DateConstraints {
-  const out: FastCheck.DateConstraints = { ...base }
-  if (ordered?.minimum !== undefined) {
-    const minimum = toDate === undefined ? ordered.minimum as globalThis.Date : toDate(ordered.minimum)
-    const nextMin = ordered.exclusiveMinimum ? new globalThis.Date(minimum.getTime() + 1) : minimum
-    if (out.min === undefined || nextMin.getTime() > out.min.getTime()) {
-      out.min = nextMin
-    }
-  }
-  if (ordered?.maximum !== undefined) {
-    const maximum = toDate === undefined ? ordered.maximum as globalThis.Date : toDate(ordered.maximum)
-    const nextMax = ordered.exclusiveMaximum ? new globalThis.Date(maximum.getTime() - 1) : maximum
-    if (out.max === undefined || nextMax.getTime() < out.max.getTime()) {
-      out.max = nextMax
-    }
-  }
-  return out
-}
-
 const DateString = String.annotate({ expected: "a string that will be decoded as a Date" })
-
 /**
  * Schema for valid JavaScript `Date` objects.
  *
@@ -12158,12 +11939,7 @@ export const Date: Date = declare(
       link<globalThis.Date>()(
         DateString,
         SchemaTransformation.dateFromString
-      ),
-    toArbitrary: () => (fc, ctx) =>
-      fc.date(dateArbitraryConstraints(
-        ctx?.constraint?.ordered?.order === Order.Date ? ctx.constraint.ordered : undefined,
-        { noInvalidDate: true }
-      ))
+      )
   }
 )
 
@@ -12340,16 +12116,7 @@ export const Duration: Duration = declare(
             }
           }
         })
-      ),
-    toArbitrary: () => (fc) =>
-      fc.oneof(
-        fc.constant(Duration_.infinity),
-        fc.constant(Duration_.negativeInfinity),
-        fc.bigInt().map(Duration_.nanos),
-        fc.maxSafeInteger().map(Duration_.millis)
-      ),
-    toFormatter: () => globalThis.String,
-    toEquivalence: () => Duration_.Equivalence
+      )
   }
 )
 
@@ -12466,6 +12233,155 @@ export const DurationFromMillis: DurationFromMillis = Number.pipe(
 )
 
 /**
+ * Type-level representation of {@link ByteSize}.
+ *
+ * @category models
+ * @since 4.0.0
+ */
+export interface ByteSize extends declare<ByteSize_.ByteSize> {
+  readonly "Rebuild": ByteSize
+}
+
+/**
+ * Schema for exact, non-negative `ByteSize` values.
+ *
+ * **Details**
+ *
+ * The JSON codec encodes the byte count as a bigint string, preserving values
+ * beyond JavaScript's safe-integer range. The StringTree codec uses the
+ * human-readable byte-size syntax exposed by {@link ByteSizeFromString}.
+ *
+ * @category schemas
+ * @since 4.0.0
+ */
+export const ByteSize: ByteSize = declare(
+  ByteSize_.isByteSize,
+  {
+    representation: {
+      id: "effect/schema/ByteSize",
+      payload: null
+    },
+    toCode: () => ({
+      runtime: `Schema.ByteSize`,
+      Type: `ByteSize.ByteSize`,
+      importDeclarations: [`import * as ByteSize from "effect/ByteSize"`]
+    }),
+    expected: "ByteSize",
+    toCodecJson: () =>
+      link<ByteSize_.ByteSize>()(
+        BigInt.check(isGreaterThanOrEqualToBigInt(globalThis.BigInt(0))),
+        SchemaTransformation.transform({
+          decode: ByteSize_.bytes,
+          encode: ByteSize_.toBigInt
+        })
+      ),
+    toCodecStringTree: () =>
+      link<ByteSize_.ByteSize>()(
+        ByteSizeString,
+        SchemaTransformation.byteSizeFromString
+      )
+  }
+)
+
+/**
+ * Reviver for persisted {@link ByteSize} declarations.
+ *
+ * @category schemas
+ * @since 4.0.0
+ */
+export const ByteSizeReviver = makeFixedDeclarationReviver(
+  "effect/schema/ByteSize",
+  ByteSize
+)
+
+const ByteSizeString = String.annotate({ expected: "a string that will be decoded as a ByteSize" })
+
+/**
+ * Type-level representation of {@link ByteSizeFromString}.
+ *
+ * @category models
+ * @since 4.0.0
+ */
+export interface ByteSizeFromString extends decodeTo<ByteSize, String> {
+  readonly "Rebuild": ByteSizeFromString
+}
+
+/**
+ * Schema that decodes byte-size strings into exact, non-negative `ByteSize`
+ * values.
+ *
+ * **Details**
+ *
+ * Decoding accepts an unsigned base-10 integer or decimal followed by optional
+ * whitespace and one of these case-sensitive units:
+ *
+ * - bytes: `B`, `byte`, or `bytes`
+ * - decimal SI units (powers of 1,000): `kB`, `MB`, `GB`, `TB`, `PB`, `EB`,
+ *   `ZB`, `YB`, `RB`, or `QB`, plus their lowercase singular and plural names
+ * - binary IEC units (powers of 1,024): `KiB`, `MiB`, `GiB`, `TiB`, `PiB`,
+ *   `EiB`, `ZiB`, or `YiB`, plus their lowercase singular and plural names
+ *
+ * Leading and trailing whitespace is ignored. A decimal quantity must resolve
+ * to an integral number of bytes, so `1.5 kB` is accepted while `0.1 KiB` is
+ * rejected.
+ *
+ * Encoding returns the exact byte count as `<count> byte` or `<count> bytes`.
+ *
+ * **Gotchas**
+ *
+ * A unit is required. Signs, exponent notation, digit separators, and ambiguous
+ * unit spellings such as `KB`, `mb`, `Mb`, or `b` are rejected.
+ *
+ * @category schemas
+ * @since 4.0.0
+ */
+export const ByteSizeFromString: ByteSizeFromString = ByteSizeString.pipe(
+  decodeTo(ByteSize, SchemaTransformation.byteSizeFromString)
+)
+
+/**
+ * Type-level representation of {@link ByteSizeFromBigInt}.
+ *
+ * @category models
+ * @since 4.0.0
+ */
+export interface ByteSizeFromBigInt extends decodeTo<ByteSize, BigInt> {
+  readonly "Rebuild": ByteSizeFromBigInt
+}
+
+/**
+ * Schema that decodes non-negative bigint byte counts.
+ *
+ * @category schemas
+ * @since 4.0.0
+ */
+export const ByteSizeFromBigInt: ByteSizeFromBigInt = BigInt.pipe(
+  decodeTo(ByteSize, SchemaTransformation.byteSizeFromBigInt)
+)
+
+/**
+ * Type-level representation of {@link ByteSizeFromNumber}.
+ *
+ * @category models
+ * @since 4.0.0
+ */
+export interface ByteSizeFromNumber extends decodeTo<ByteSize, Number> {
+  readonly "Rebuild": ByteSizeFromNumber
+}
+
+/**
+ * Schema that decodes non-negative safe-integer byte counts.
+ *
+ * Encoding fails when the byte count exceeds `Number.MAX_SAFE_INTEGER`.
+ *
+ * @category schemas
+ * @since 4.0.0
+ */
+export const ByteSizeFromNumber: ByteSizeFromNumber = Number.pipe(
+  decodeTo(ByteSize, SchemaTransformation.byteSizeFromNumber)
+)
+
+/**
  * Type-level representation of {@link BigDecimal}.
  *
  * @category models
@@ -12476,80 +12392,52 @@ export interface BigDecimal extends declare<BigDecimal_.BigDecimal> {
 }
 
 const BigDecimalString = String.annotate({ expected: "a string that will be decoded as a BigDecimal" })
+const arbitraryBigDecimalMaxScale = 20
 
-const bigDecimalDefaultMaxScale = 20
-const bigDecimalInvalidOrderedConstraintsError = "Unable to derive an arbitrary for the ordered BigDecimal constraints"
-
-function bigDecimalScaleValueAtScale(bd: BigDecimal_.BigDecimal, scale: number): bigint {
-  return BigDecimal_.scale(bd, scale).value
+function bigIntArbitrarySchema(minimum: bigint | undefined, maximum: bigint | undefined): Codec<bigint> {
+  if (minimum !== undefined && maximum !== undefined) {
+    return BigInt.check(isBetweenBigInt({ minimum, maximum }))
+  }
+  if (minimum !== undefined) return BigInt.check(isGreaterThanOrEqualToBigInt(minimum))
+  if (maximum !== undefined) return BigInt.check(isLessThanOrEqualToBigInt(maximum))
+  return BigInt
 }
 
-function bigDecimalMinValueAtScale(
-  minimum: BigDecimal_.BigDecimal,
-  scale: number,
-  excluded: boolean
-): bigint {
-  return excluded
-    ? bigDecimalScaleValueAtScale(BigDecimal_.floor(minimum, scale), scale) + globalThis.BigInt(1)
-    : bigDecimalScaleValueAtScale(BigDecimal_.ceil(minimum, scale), scale)
+function bigDecimalValueAtScale(value: BigDecimal_.BigDecimal, scale: number): bigint {
+  return value.value * globalThis.BigInt(10) ** globalThis.BigInt(scale - value.scale)
 }
 
-function bigDecimalMaxValueAtScale(
-  maximum: BigDecimal_.BigDecimal,
-  scale: number,
-  excluded: boolean
-): bigint {
-  return excluded
-    ? bigDecimalScaleValueAtScale(BigDecimal_.ceil(maximum, scale), scale) - globalThis.BigInt(1)
-    : bigDecimalScaleValueAtScale(BigDecimal_.floor(maximum, scale), scale)
-}
-
-function bigDecimalMaxScale(ordered: Annotations.ToArbitrary.OrderedConstraint<BigDecimal_.BigDecimal>): number {
-  return Math.max(
-    bigDecimalDefaultMaxScale,
-    ordered.minimum?.scale ?? 0,
-    ordered.maximum?.scale ?? 0,
-    ordered.exclusiveMinimum && ordered.minimum !== undefined ? ordered.minimum.scale + 1 : 0,
-    ordered.exclusiveMaximum && ordered.maximum !== undefined ? ordered.maximum.scale + 1 : 0
+function bigDecimalArbitrarySchema(
+  constraint: Annotations.ToArbitrary.GenerationConstraint<BigDecimal_.BigDecimal> | undefined
+): Codec<{ readonly value: bigint; readonly scale: number }> {
+  if (constraint?.minimum === undefined && constraint?.maximum === undefined) {
+    return Struct({
+      value: BigInt,
+      scale: Int.check(isBetween({ minimum: 0, maximum: arbitraryBigDecimalMaxScale }))
+    })
+  }
+  const scale = Math.max(
+    arbitraryBigDecimalMaxScale,
+    constraint.minimum?.scale ?? 0,
+    constraint.maximum?.scale ?? 0,
+    constraint.exclusiveMinimum === true && constraint.minimum !== undefined ? constraint.minimum.scale + 1 : 0,
+    constraint.exclusiveMaximum === true && constraint.maximum !== undefined ? constraint.maximum.scale + 1 : 0
   )
-}
-
-function bigDecimalValueConstraintsAtScale(
-  ordered: Annotations.ToArbitrary.OrderedConstraint<BigDecimal_.BigDecimal>,
-  scale: number
-): FastCheck.BigIntConstraints | undefined {
-  const constraints: FastCheck.BigIntConstraints = {}
-  if (ordered.minimum !== undefined) {
-    constraints.min = bigDecimalMinValueAtScale(ordered.minimum, scale, ordered.exclusiveMinimum === true)
+  const minimum = constraint.minimum === undefined
+    ? undefined
+    : bigDecimalValueAtScale(constraint.minimum, scale) +
+      (constraint.exclusiveMinimum === true ? globalThis.BigInt(1) : globalThis.BigInt(0))
+  const maximum = constraint.maximum === undefined
+    ? undefined
+    : bigDecimalValueAtScale(constraint.maximum, scale) -
+      (constraint.exclusiveMaximum === true ? globalThis.BigInt(1) : globalThis.BigInt(0))
+  if (minimum !== undefined && maximum !== undefined && minimum > maximum) {
+    return Struct({
+      value: BigInt,
+      scale: Int.check(isBetween({ minimum: 0, maximum: arbitraryBigDecimalMaxScale }))
+    })
   }
-  if (ordered.maximum !== undefined) {
-    constraints.max = bigDecimalMaxValueAtScale(ordered.maximum, scale, ordered.exclusiveMaximum === true)
-  }
-  if (constraints.min !== undefined && constraints.max !== undefined && constraints.min > constraints.max) {
-    return undefined
-  }
-  return constraints
-}
-
-function bigDecimalScaleConstraints(
-  ordered: Annotations.ToArbitrary.OrderedConstraint<BigDecimal_.BigDecimal>
-): FastCheck.IntegerConstraints {
-  const max = bigDecimalMaxScale(ordered)
-  if (bigDecimalValueConstraintsAtScale(ordered, max) === undefined) {
-    throw new globalThis.Error(bigDecimalInvalidOrderedConstraintsError)
-  }
-
-  let min = 0
-  let high = max
-  while (min < high) {
-    const scale = min + Math.floor((high - min) / 2)
-    if (bigDecimalValueConstraintsAtScale(ordered, scale) === undefined) {
-      min = scale + 1
-    } else {
-      high = scale
-    }
-  }
-  return { min, max }
+  return Struct({ value: bigIntArbitrarySchema(minimum, maximum), scale: Literal(scale) })
 }
 
 /**
@@ -12584,30 +12472,17 @@ export const BigDecimal: BigDecimal = declare(
       importDeclarations: [`import * as BigDecimal from "effect/BigDecimal"`]
     }),
     expected: "BigDecimal",
+    toCodecArbitrary: ({ constraint }) =>
+      linkDecoding<BigDecimal_.BigDecimal>()(
+        bigDecimalArbitrarySchema(constraint),
+        SchemaGetter.transform(({ scale, value }) => BigDecimal_.make(value, scale))
+      ),
     toCodecJson: () =>
       link<BigDecimal_.BigDecimal>()(
         BigDecimalString,
         SchemaTransformation.bigDecimalFromString
       ),
-    toArbitrary: () => (fc, ctx) => {
-      const ordered = ctx.constraint?.ordered?.order === BigDecimal_.Order
-        ? ctx.constraint.ordered as Annotations.ToArbitrary.OrderedConstraint<BigDecimal_.BigDecimal>
-        : undefined
-      if (ordered === undefined) {
-        return fc.tuple(fc.bigInt(), fc.integer({ min: 0, max: bigDecimalDefaultMaxScale }))
-          .map(([value, scale]) => BigDecimal_.make(value, scale))
-      }
-
-      return fc.integer(bigDecimalScaleConstraints(ordered)).chain((scale) => {
-        const constraints = bigDecimalValueConstraintsAtScale(ordered, scale)
-        if (constraints === undefined) {
-          throw new globalThis.Error(bigDecimalInvalidOrderedConstraintsError)
-        }
-        return fc.bigInt(constraints).map((value) => BigDecimal_.make(value, scale))
-      })
-    },
-    toFormatter: () => (bd) => BigDecimal_.format(bd),
-    toEquivalence: () => BigDecimal_.Equivalence
+    toFormatter: () => (bd) => BigDecimal_.format(bd)
   }
 )
 
@@ -13543,8 +13418,7 @@ export const Uint8Array: Uint8Array = instanceOf(globalThis.Uint8Array<ArrayBuff
     link<globalThis.Uint8Array<ArrayBufferLike>>()(
       Base64String,
       SchemaTransformation.uint8ArrayFromBase64String
-    ),
-  toArbitrary: () => (fc) => fc.uint8Array()
+    )
 })
 
 /**
@@ -13661,6 +13535,51 @@ export const Uint8ArrayFromHex: Uint8ArrayFromHex = String.annotate({
   })
 )
 
+const arbitraryMinimumDateTimestamp = -8_640_000_000_000_000
+const arbitraryMaximumDateTimestamp = 8_640_000_000_000_000
+const arbitraryMinimumZonedDateTimeTimestamp = arbitraryMinimumDateTimestamp + 14 * 60 * 60 * 1000
+const arbitraryMaximumZonedDateTimeTimestamp = arbitraryMaximumDateTimestamp - 14 * 60 * 60 * 1000
+const arbitraryMinimumTimeZoneOffset = -12 * 60 * 60 * 1000
+const arbitraryMaximumTimeZoneOffset = 14 * 60 * 60 * 1000
+const arbitraryNamedTimeZones = [
+  "UTC",
+  "Europe/London",
+  "America/New_York",
+  "Asia/Tokyo",
+  "Australia/Sydney"
+] as const
+
+function dateTimeArbitraryBounds<T extends { readonly epochMilliseconds: number }>(
+  constraint: Annotations.ToArbitrary.GenerationConstraint<T> | undefined,
+  domainMinimum: number,
+  domainMaximum: number
+): readonly [minimum: number, maximum: number] {
+  const minimum = Math.max(
+    domainMinimum,
+    constraint?.minimum === undefined
+      ? domainMinimum
+      : constraint.minimum.epochMilliseconds + (constraint.exclusiveMinimum === true ? 1 : 0)
+  )
+  const maximum = Math.min(
+    domainMaximum,
+    constraint?.maximum === undefined
+      ? domainMaximum
+      : constraint.maximum.epochMilliseconds - (constraint.exclusiveMaximum === true ? 1 : 0)
+  )
+  return minimum <= maximum ? [minimum, maximum] : [domainMinimum, domainMaximum]
+}
+
+function dateTimeArbitraryInteger(minimum: number, maximum: number): Codec<number> {
+  return Int.check(isBetween({ minimum, maximum }))
+}
+
+function timeZoneArbitrarySchema(): Codec<number | string> {
+  return Union([
+    dateTimeArbitraryInteger(arbitraryMinimumTimeZoneOffset, arbitraryMaximumTimeZoneOffset),
+    Literals(arbitraryNamedTimeZones)
+  ])
+}
+
 /**
  * Type-level representation of {@link DateTimeUtc}.
  *
@@ -13705,20 +13624,23 @@ export const DateTimeUtc: DateTimeUtc = declare(
       importDeclarations: [`import * as DateTime from "effect/DateTime"`]
     }),
     expected: "DateTime.Utc",
+    toCodecArbitrary: ({ constraint }) => {
+      const [minimum, maximum] = dateTimeArbitraryBounds(
+        constraint,
+        arbitraryMinimumDateTimestamp,
+        arbitraryMaximumDateTimestamp
+      )
+      return linkDecoding<DateTime.Utc>()(
+        dateTimeArbitraryInteger(minimum, maximum),
+        SchemaGetter.transform(DateTime.makeUnsafe)
+      )
+    },
     toCodecJson: () =>
       link<DateTime.Utc>()(
         String,
         SchemaTransformation.dateTimeUtcFromString
       ),
-    toArbitrary: () => (fc, ctx) =>
-      fc.date(dateArbitraryConstraints(
-        ctx?.constraint?.ordered?.order === DateTime.Order ? ctx.constraint.ordered : undefined,
-        { noInvalidDate: true },
-        DateTime.toDateUtc
-      ))
-        .map((date) => DateTime.fromDateUnsafe(date)),
-    toFormatter: () => (utc) => utc.toString(),
-    toEquivalence: () => DateTime.Equivalence
+    toFormatter: () => (utc) => utc.toString()
   }
 )
 
@@ -13895,10 +13817,7 @@ export const TimeZoneOffset: TimeZoneOffset = declare(
         Int,
         SchemaTransformation.timeZoneOffsetFromNumber
       ),
-    toArbitrary: () => (fc) =>
-      fc.integer({ min: -12 * 60 * 60 * 1000, max: 14 * 60 * 60 * 1000 }).map((n) => DateTime.zoneMakeOffset(n)),
-    toFormatter: () => (tz) => DateTime.zoneToString(tz),
-    toEquivalence: () => (a, b) => a.offset === b.offset
+    toFormatter: () => (tz) => DateTime.zoneToString(tz)
   }
 )
 
@@ -13956,19 +13875,17 @@ export const TimeZoneNamed: TimeZoneNamed = declare(
       importDeclarations: [`import * as DateTime from "effect/DateTime"`]
     }),
     expected: "DateTime.TimeZone.Named",
+    toCodecArbitrary: () =>
+      linkDecoding<DateTime.TimeZone.Named>()(
+        Literals(arbitraryNamedTimeZones),
+        SchemaGetter.transform(DateTime.zoneMakeNamedUnsafe)
+      ),
     toCodecJson: () =>
       link<DateTime.TimeZone.Named>()(
         TimeZoneNamedString,
         SchemaTransformation.timeZoneNamedFromString
       ),
-    toArbitrary: () => (fc) =>
-      fc.constantFrom(
-        ...["UTC", "Europe/London", "America/New_York", "Asia/Tokyo", "Australia/Sydney"].map(
-          DateTime.zoneMakeNamedUnsafe
-        )
-      ),
-    toFormatter: () => (tz) => DateTime.zoneToString(tz),
-    toEquivalence: () => (a, b) => a.id === b.id
+    toFormatter: () => (tz) => DateTime.zoneToString(tz)
   }
 )
 
@@ -14057,22 +13974,19 @@ export const TimeZone: TimeZone = declare(
       importDeclarations: [`import * as DateTime from "effect/DateTime"`]
     }),
     expected: "DateTime.TimeZone",
+    toCodecArbitrary: () =>
+      linkDecoding<DateTime.TimeZone>()(
+        timeZoneArbitrarySchema(),
+        SchemaGetter.transform((value) =>
+          typeof value === "number" ? DateTime.zoneMakeOffset(value) : DateTime.zoneMakeNamedUnsafe(value)
+        )
+      ),
     toCodecJson: () =>
       link<DateTime.TimeZone>()(
         TimeZoneString,
         SchemaTransformation.timeZoneFromString
       ),
-    toArbitrary: () => (fc) =>
-      fc.oneof(
-        fc.integer({ min: -12 * 60 * 60 * 1000, max: 14 * 60 * 60 * 1000 }).map((n) => DateTime.zoneMakeOffset(n)),
-        fc.constantFrom(
-          ...["UTC", "Europe/London", "America/New_York", "Asia/Tokyo", "Australia/Sydney"].map(
-            DateTime.zoneMakeNamedUnsafe
-          )
-        )
-      ),
-    toFormatter: () => (tz) => DateTime.zoneToString(tz),
-    toEquivalence: () => (a, b) => DateTime.zoneToString(a) === DateTime.zoneToString(b)
+    toFormatter: () => (tz) => DateTime.zoneToString(tz)
   }
 )
 
@@ -14163,24 +14077,27 @@ export const DateTimeZoned: DateTimeZoned = declare(
       importDeclarations: [`import * as DateTime from "effect/DateTime"`]
     }),
     expected: "DateTime.Zoned",
+    toCodecArbitrary: ({ constraint }) => {
+      const [minimum, maximum] = dateTimeArbitraryBounds(
+        constraint,
+        arbitraryMinimumZonedDateTimeTimestamp,
+        arbitraryMaximumZonedDateTimeTimestamp
+      )
+      return linkDecoding<DateTime.Zoned>()(
+        Struct({
+          epochMilliseconds: dateTimeArbitraryInteger(minimum, maximum),
+          timeZone: timeZoneArbitrarySchema()
+        }),
+        SchemaGetter.transform(({ epochMilliseconds, timeZone }) =>
+          DateTime.makeZonedUnsafe(epochMilliseconds, { timeZone })
+        )
+      )
+    },
     toCodecJson: () =>
       link<DateTime.Zoned>()(
         DateTimeZonedString,
         SchemaTransformation.dateTimeZonedFromString
       ),
-    toArbitrary: () => (fc, ctx) =>
-      fc.tuple(
-        fc.date(dateArbitraryConstraints(
-          ctx?.constraint?.ordered?.order === DateTime.Order ? ctx.constraint.ordered : undefined,
-          {
-            max: new globalThis.Date(8640000000000000 - 14 * 60 * 60 * 1000),
-            min: new globalThis.Date(-8640000000000000 + 14 * 60 * 60 * 1000),
-            noInvalidDate: true
-          },
-          DateTime.toDateUtc
-        )),
-        fc.constantFrom("UTC", "Europe/London", "America/New_York", "Asia/Tokyo", "Australia/Sydney")
-      ).map(([date, zone]) => DateTime.makeZonedUnsafe(date, { timeZone: zone })),
     toFormatter: () => (zoned) => DateTime.formatIsoZoned(zoned),
     toEquivalence: () => DateTime.Equivalence
   }
@@ -14494,10 +14411,7 @@ function getClassSchemaFactory<S extends Constraint>(
           }),
           toCodec: ([from]: readonly [ConstraintCodec<S["Encoded"], S["Encoded"]>]) =>
             new SchemaAST.Link(from.ast, transformation),
-          toArbitrary: ([from]: readonly [Annotations.ToArbitrary.TypeParameter<S["Type"]>]) => () => ({
-            arbitrary: from.arbitrary.map((args: S["Type"]) => new self(args)),
-            terminal: from.terminal?.map((args: S["Type"]) => new self(args))
-          }),
+          toEquivalence: ([from]: readonly [Equivalence.Equivalence<S["Type"]>]) => from,
           toFormatter: ([from]: readonly [Formatter<S["Type"]>]) => (t: Self) => `${self.identifier}(${from(t)})`,
           [InternalAnnotations.SENTINELS_ANNOTATION_KEY]: SchemaAST.collectSentinels(from.ast),
           ...annotations
@@ -14802,60 +14716,6 @@ export const TaggedError: {
 }
 
 // -----------------------------------------------------------------------------
-// Arbitrary
-// -----------------------------------------------------------------------------
-
-/**
- * Represents a function that builds a fast-check `Arbitrary<T>` from the
- * `fast-check` module.
- *
- * **When to use**
- *
- * Use as the result type of schema arbitrary derivation.
- *
- * @category utility types
- * @since 4.0.0
- */
-export type Arbitrary<T> = (fc: typeof FastCheck) => FastCheck.Arbitrary<T>
-
-/**
- * Returns an {@link Arbitrary} factory derived from a schema. The generated
- * values satisfy the schema and use its decoded `Type`.
- *
- * **When to use**
- *
- * Use when you need a fast-check generator for values accepted by a schema.
- *
- * **Details**
- *
- * Constraints refine base generators; candidates add weighted sources while
- * filters still validate every value. Recursive schemas use terminal branches
- * and fail when no finite terminal path exists. The result is memoized so
- * repeated calls with the same schema are cheap.
- *
- * **Example** (Generating arbitrary values)
- *
- * ```ts import.meta.vitest
- * import { Schema } from "effect"
- * import * as FastCheck from "fast-check"
- *
- * const makePersonArbitrary = Schema.toArbitrary(
- *   Schema.Struct({ name: Schema.String, age: Schema.Number })
- * )
- *
- * const PersonArbitrary = makePersonArbitrary(FastCheck)
- * FastCheck.sample(PersonArbitrary, 1)
- * ```
- *
- * @category generators
- * @since 4.0.0
- */
-export function toArbitrary<S extends Constraint>(schema: S): Arbitrary<S["Type"]> {
-  const lawc = InternalArbitrary.memoized(schema.ast)
-  return (fc) => lawc(fc, {})
-}
-
-// -----------------------------------------------------------------------------
 // Formatter
 // -----------------------------------------------------------------------------
 
@@ -14928,6 +14788,90 @@ export function toFormatter<S extends Constraint>(schema: S, options?: {
         return () => "never"
       case "Void":
         return () => "void"
+      case "Declaration": {
+        const representation = (ast.annotations as Annotations.Declaration<any> | undefined)?.representation
+        if (representation === undefined) return format
+        const typeParameters = ast.typeParameters.map(recur)
+        switch (representation.id) {
+          case "effect/schema/Option": {
+            const [value] = typeParameters
+            return Option_.match({
+              onNone: () => "none()",
+              onSome: (t) => `some(${value(t)})`
+            })
+          }
+          case "effect/schema/Result": {
+            const [success, failure] = typeParameters
+            return Result_.match({
+              onSuccess: (t) => `success(${success(t)})`,
+              onFailure: (t) => `failure(${failure(t)})`
+            })
+          }
+          case "effect/schema/CauseReason":
+            return causeReasonToFormatter(typeParameters[0], typeParameters[1])
+          case "effect/schema/Cause":
+            return causeToFormatter(typeParameters[0], typeParameters[1])
+          case "effect/schema/Exit": {
+            const [value, error, defect] = typeParameters
+            const cause = causeToFormatter(error, defect)
+            return (exit: Exit_.Exit<unknown, unknown>) => {
+              switch (exit._tag) {
+                case "Success":
+                  return `Exit.Success(${value(exit.value)})`
+                case "Failure":
+                  return `Exit.Failure(${cause(exit.cause)})`
+              }
+            }
+          }
+          case "effect/schema/ReadonlyMap": {
+            const [key, value] = typeParameters
+            return (map: globalThis.ReadonlyMap<unknown, unknown>) => {
+              const size = map.size
+              if (size === 0) return "ReadonlyMap(0) {}"
+              const entries = globalThis.Array.from(map.entries()).sort().map(([k, v]) => `${key(k)} => ${value(v)}`)
+              return `ReadonlyMap(${size}) { ${entries.join(", ")} }`
+            }
+          }
+          case "effect/schema/HashMap": {
+            const [key, value] = typeParameters
+            return (map: HashMap_.HashMap<unknown, unknown>) => {
+              const size = HashMap_.size(map)
+              if (size === 0) return "HashMap(0) {}"
+              const entries = HashMap_.toEntries(map).sort().map(([k, v]) => `${key(k)} => ${value(v)}`)
+              return `HashMap(${size}) { ${entries.join(", ")} }`
+            }
+          }
+          case "effect/schema/ReadonlySet": {
+            const [value] = typeParameters
+            return (set: globalThis.ReadonlySet<unknown>) => {
+              const size = set.size
+              if (size === 0) return "ReadonlySet(0) {}"
+              const values = globalThis.Array.from(set.values()).sort().map((item) => `${value(item)}`)
+              return `ReadonlySet(${size}) { ${values.join(", ")} }`
+            }
+          }
+          case "effect/schema/HashSet": {
+            const [value] = typeParameters
+            return (set: HashSet_.HashSet<unknown>) => {
+              const size = HashSet_.size(set)
+              if (size === 0) return "HashSet(0) {}"
+              const values = globalThis.Array.from(set).sort().map((item) => `${value(item)}`)
+              return `HashSet(${size}) { ${values.join(", ")} }`
+            }
+          }
+          case "effect/schema/Chunk": {
+            const [value] = typeParameters
+            return (chunk: Chunk_.Chunk<unknown>) => {
+              const size = Chunk_.size(chunk)
+              if (size === 0) return "Chunk(0) {}"
+              const values = globalThis.Array.from(chunk).sort().map((item) => `${value(item)}`)
+              return `Chunk(${size}) { ${values.join(", ")} }`
+            }
+          }
+          default:
+            return format
+        }
+      }
       case "Arrays": {
         const elements = ast.elements.map(recur)
         const rest = ast.rest.map(recur)
@@ -15079,15 +15023,26 @@ export function toEquivalence<T>(schema: Schema<T>): Equivalence.Equivalence<T> 
  * Derives an intermediate `SchemaRepresentation.Document` from the encoded
  * side of a schema.
  *
+ * **When to use**
+ *
+ * Use when you have a `Schema` and need its live structural representation for inspection, persistence, or compilation.
+ *
  * **Details**
  *
  * Use {@link toType} before this function to represent the type side instead.
+ * The optional reference policy controls which candidates are extracted into the document's reference table. By
+ * default, only candidates with a resolved identifier become references; recursive candidates always require one.
+ *
+ * @see {@link SchemaRepresentation.toRepresentation} for converting a `SchemaAST.AST` directly
  *
  * @category converting
  * @since 4.0.0
  */
-export function toRepresentation(schema: Constraint): SchemaRepresentation.Document {
-  return InternalToRepresentation.toRepresentation(schema.ast)
+export function toRepresentation(
+  schema: Constraint,
+  options?: SchemaRepresentation.ToRepresentationOptions
+): SchemaRepresentation.Document {
+  return InternalToRepresentation.toRepresentation(schema.ast, options)
 }
 
 // -----------------------------------------------------------------------------
@@ -15095,12 +15050,23 @@ export function toRepresentation(schema: Constraint): SchemaRepresentation.Docum
 // -----------------------------------------------------------------------------
 
 /**
- * Options for {@link toJsonSchemaDocument}.
+ * Options for reference allocation and JSON Schema generation in {@link toJsonSchemaDocument}.
+ *
+ * **Details**
+ *
+ * The inherited `referencePolicy` runs after the input schema is converted to its canonical JSON codec, so it receives
+ * canonical JSON-encoded ASTs. The remaining options control compilation of the resulting live representation.
+ *
+ * **Gotchas**
+ *
+ * When these options are passed directly to `SchemaRepresentation.toJsonSchemaDocument` or
+ * `SchemaRepresentation.toJsonSchemaMultiDocument`, reference allocation has already happened and `referencePolicy`
+ * has no effect.
  *
  * @category options
  * @since 4.0.0
  */
-export interface ToJsonSchemaOptions {
+export interface ToJsonSchemaOptions extends SchemaRepresentation.ToRepresentationOptions {
   /**
    * Controls how additional properties are handled while resolving the JSON
    * schema.
@@ -15166,20 +15132,37 @@ export interface ToJsonSchemaOptions {
 /**
  * Returns a JSON Schema document using draft 2020-12.
  *
+ * **When to use**
+ *
+ * Use when you need a draft-2020-12 description of the canonical JSON form of a runtime schema.
+ *
  * **Details**
  *
- * The `options` parameter controls generation details such as additional
- * properties and synthesized check descriptions; it does not change the draft
- * target. Declarations are lowered through their `toCodecJson` or `toCodec`
+ * The `options` parameter controls reference extraction and generation details
+ * such as additional properties and synthesized check descriptions; it does
+ * not change the draft target. The reference policy receives canonical JSON
+ * encoded ASTs. By default, anonymous non-recursive candidates remain inline, while candidates with resolved identifiers
+ * become definitions. Declarations are lowered through their `toCodecJson` or `toCodec`
  * annotation when available before the representation document is compiled.
+ * For schemas whose codec JSON AST can be represented exactly in JSON Schema,
+ * importing the emitted document reconstructs a schema that accepts the same
+ * JSON values. This is a semantic round-trip guarantee; the reconstructed AST
+ * may have a different shape.
  *
  * **Gotchas**
  *
  * JSON Schema generation is best-effort. Some Effect schema semantics cannot
  * be represented exactly in JSON Schema, and importing an emitted JSON Schema
  * may produce an equivalent approximation rather than the original schema
- * shape. Opaque declarations without a structural codec are represented by an
- * unconstrained JSON Schema.
+ * shape. Such schemas are outside the exact round-trip subset. When canonical
+ * JSON derivation adds an artificial transformation, checks and annotations on
+ * its source node are not copied to the JSON target, so they do not appear in
+ * the emitted document. Opaque declarations without a structural codec are
+ * represented by an unconstrained JSON Schema. Effect decoding may discard
+ * excess object properties by default; use `onExcessProperty: "error"` when
+ * comparing validation semantics with an emitted JSON Schema.
+ *
+ * @see {@link SchemaRepresentation.toJsonSchemaDocument} for compiling an existing live representation document
  *
  * @category converting
  * @since 4.0.0
@@ -15190,7 +15173,7 @@ export function toJsonSchemaDocument(
 ): JsonSchema.Document<"draft-2020-12"> {
   const document = InternalToRepresentation.toRepresentation(
     toCodecJsonAST(schema.ast),
-    InternalToJsonSchemaDocument.toRepresentationOptions
+    options
   )
   return InternalToJsonSchemaDocument.toJsonSchemaDocument(document, options)
 }
@@ -15231,13 +15214,22 @@ export interface toCodecJson<S extends Constraint> extends
  * Derives a canonical JSON codec from a schema. The encoded form is `Json`, and
  * decoding produces the schema's `Type`.
  *
+ * **Details**
+ *
+ * Derivation does not run transformations. Annotation links may be asynchronous,
+ * may fail, and may use optional services; the consuming parser chooses the
+ * execution and failure handling. Because hooks do not widen the returned
+ * service types, links cannot require services not declared by the input schema.
+ *
  * **Gotchas**
  *
  * Declarations without a `toCodecJson` or `toCodec` annotation use `Json` as
  * their encoded schema. This keeps codec construction total, but encoding or
  * decoding can still fail when declaration values are not JSON values. A
  * `toCodecJson` callback can return `undefined` when the declaration is already
- * in canonical JSON form.
+ * in canonical JSON form. When derivation adds an artificial transformation,
+ * checks and annotations remain on its source node rather than being copied to
+ * the JSON target. Source checks still run after the transformation.
  *
  * @category converting
  * @since 4.0.0
@@ -15356,8 +15348,18 @@ function toCodecJsonASTStep(ast: SchemaAST.AST, recur: (ast: SchemaAST.AST) => S
 }
 
 /**
- * Derives an isomorphism codec from a schema. The encoded form is the
- * schema's `Iso` type — the intermediate representation used for round-tripping.
+ * Derives an isomorphism codec from a schema. The encoded form is the schema's
+ * `Iso` type — the intermediate representation used for round-tripping.
+ *
+ * **Details**
+ *
+ * Annotation links may be asynchronous, may fail, and may use optional services;
+ * the consuming parser chooses the execution and failure handling.
+ *
+ * **Gotchas**
+ *
+ * Links cannot require services because the returned `Codec` does not expose
+ * service requirements.
  *
  * @category converting
  * @since 4.0.0
@@ -15432,6 +15434,13 @@ export interface toCodecStringTree<S extends Constraint> extends
 /**
  * Converts a schema to the StringTree canonical codec, where every leaf value
  * becomes a string while preserving the original structure.
+ *
+ * **Details**
+ *
+ * Derivation does not run transformations. Annotation links may be asynchronous,
+ * may fail, and may use optional services; the consuming parser chooses the
+ * execution and failure handling. Links cannot require services not declared by
+ * the input schema because hooks do not widen the returned service types.
  *
  * **Gotchas**
  *
@@ -15990,10 +15999,11 @@ export const isBetweenBigIntReviver: SchemaRepresentation.FilterReviver<{
  *
  * **Gotchas**
  *
- * Either direction can throw an `Error` with the generic message
- * `"Schema validation failed"` and a `SchemaIssue.Issue` in its `cause`. Format
- * the `cause` explicitly with `SchemaIssue.makeFormatterDefault()` when
- * human-readable details are needed.
+ * This API runs synchronously, so failing, asynchronous, or service-dependent
+ * transformations can throw. Schema failures use `"Schema validation failed"`
+ * with a `SchemaIssue.Issue` in `cause`; format it with
+ * `SchemaIssue.makeFormatterDefault()`. Consume {@link toCodecIso} with an
+ * effectful parser for asynchronous execution or explicit failure handling.
  *
  * @category converting
  * @since 4.0.0
@@ -16101,11 +16111,11 @@ export function overrideToCodecIso<S extends Constraint, Iso>(
  *
  * **Gotchas**
  *
- * Schema encoding or decoding failures throw an `Error` with the generic message
- * `"Schema validation failed"` and a `SchemaIssue.Issue` in its `cause`. Format
- * the `cause` explicitly with `SchemaIssue.makeFormatterDefault()` when
- * human-readable details are needed. Errors produced by {@link JsonPatch.apply}
- * for invalid patch operations are separate from schema validation failures.
+ * This API runs synchronously, so failing, asynchronous, or service-dependent
+ * transformations can throw. Schema failures use `"Schema validation failed"`
+ * with a `SchemaIssue.Issue` in `cause`; format it with
+ * `SchemaIssue.makeFormatterDefault()`. Invalid patch operations instead produce
+ * {@link JsonPatch.apply} errors.
  *
  * @category converting
  * @since 4.0.0
@@ -16218,6 +16228,28 @@ export const Json: Codec<Json> = make(SchemaAST.annotate(SchemaAST.Json, {
     Type: "Schema.Json"
   })
 }))
+
+/**
+ * Schema for readonly string-keyed records whose values are JSON-compatible.
+ *
+ * **When to use**
+ *
+ * Use when you need to validate a JSON object rather than any JSON value.
+ *
+ * **Example** (Validating a JSON object)
+ *
+ * ```ts import.meta.vitest
+ * import { Option, Schema } from "effect"
+ *
+ * Schema.decodeUnknownOption(Schema.JsonObject)({ key: [1, true, null] }) // => Option.some({ key: [1, true, null] })
+ * Schema.decodeUnknownOption(Schema.JsonObject)([1, 2, 3]) // => Option.none()
+ * ```
+ *
+ * @see {@link Json} for a schema that also accepts JSON arrays and primitive values
+ * @category schemas
+ * @since 4.0.0
+ */
+export const JsonObject = Record(String, Json)
 
 /**
  * Reviver for persisted `Json` declarations.
@@ -16344,6 +16376,8 @@ export function resolveAnnotationsKey<S extends Constraint>(schema: S): Annotati
  *
  * @since 4.0.0
  */
+type AnnotationSchemaConstraint = Constraint
+
 export declare namespace Annotations {
   /**
    * This interface is used to define the annotations that can be attached to a
@@ -16494,9 +16528,6 @@ export declare namespace Annotations {
      * Accumulated brands when multiple brands are added with `Schema.brand`.
      */
     readonly brands?: ReadonlyArray<string> | undefined
-    readonly toArbitrary?:
-      | ToArbitrary.Declaration<T, TypeParameters>
-      | undefined
   }
 
   /**
@@ -16543,19 +16574,59 @@ export declare namespace Annotations {
     readonly representation?:
       | SchemaRepresentation.RepresentationAnnotation
       | undefined
+    /**
+     * Returns the fallback link used by canonical codec derivations.
+     *
+     * Transformations may be asynchronous, may fail, and may use optional
+     * services, but cannot require services absent from the derived codec type.
+     */
     readonly toCodec?:
       | ((typeParameters: TypeParameters.Encoded<TypeParameters>) => SchemaAST.Link)
       | undefined
+    /**
+     * Returns the link used to derive the declaration's JSON representation, or
+     * `undefined` when the declaration is already in canonical JSON form.
+     *
+     * Transformations follow the execution and service constraints of `toCodec`.
+     */
     readonly toCodecJson?:
       | ((typeParameters: TypeParameters.Encoded<TypeParameters>) => SchemaAST.Link | undefined)
       | undefined
+    /**
+     * Returns the link used to derive the declaration's StringTree
+     * representation, or `undefined` when it is already canonical.
+     *
+     * Transformations follow the execution and service constraints of `toCodec`.
+     */
     readonly toCodecStringTree?:
       | ((typeParameters: TypeParameters.Encoded<TypeParameters>) => SchemaAST.Link | undefined)
       | undefined
+    /**
+     * Returns the link used to derive the declaration's isomorphism
+     * representation.
+     *
+     * Transformations may be asynchronous, may fail, and may use optional
+     * services, but cannot require services because the derived `Codec` exposes
+     * none.
+     */
     readonly toCodecIso?:
       | ((typeParameters: TypeParameters.Type<TypeParameters>) => SchemaAST.Link)
       | undefined
-    readonly toArbitrary?: ToArbitrary.Declaration<T, TypeParameters> | undefined
+    /**
+     * Provides a generatable representation for native arbitrary derivation.
+     *
+     * **Details**
+     *
+     * The callback receives decoded type-parameter schemas and normalized constraints for the declaration. The returned
+     * Link is preferred over canonical codec annotations by the native arbitrary compiler. Generated representation
+     * values are decoded and checked against the declaration, so the Link may be asynchronous or partial. As with the
+     * other `toCodec*` hooks, the Link cannot require additional services because the derived `Arbitrary` exposes none.
+     *
+     * This annotation is experimental and may change while native arbitrary generation remains unstable.
+     *
+     * @since 4.0.0
+     */
+    readonly toCodecArbitrary?: ToArbitrary.Declaration<T, TypeParameters> | undefined
     readonly toEquivalence?: ToEquivalence.Declaration<T, TypeParameters> | undefined
     readonly toFormatter?: ToFormatter.Declaration<T, TypeParameters> | undefined
     readonly toCode?: SchemaRepresentation.Generation.Declaration | undefined
@@ -16611,17 +16682,14 @@ export declare namespace Annotations {
      */
     readonly identifier?: string | undefined
     /**
-     * Optional hints used by arbitrary derivation for this filter.
+     * Native arbitrary-generation hints for this filter.
      *
-     * **Details**
+     * The value is declarative metadata merged with constraints from the other filters on the node. The filter
+     * predicate remains authoritative.
      *
-     * The same annotation can be attached to a single filter or a
-     * `FilterGroup`. Group hints apply to the same schema node while child
-     * filters are still collected and checked normally.
+     * @since 4.0.0
      */
-    readonly arbitrary?:
-      | ToArbitrary.Filter
-      | undefined
+    readonly arbitraryConstraint?: ToArbitrary.Constraint<any> | undefined
     /**
      * Marks the filter as *structural*, meaning it applies to the shape or
      * structure of the container (e.g., array length, object keys) rather than
@@ -16637,207 +16705,88 @@ export declare namespace Annotations {
   }
 
   /**
-   * Types used by arbitrary-derivation annotations to configure `toArbitrary`
-   * hooks, filter hints, candidate sources, and merged generation constraints.
+   * Types used to guide native arbitrary derivation through constraints and declaration representations.
    *
    * @since 4.0.0
    */
   export namespace ToArbitrary {
     /**
-     * Arbitrary-generation hints attached to a filter or filter group.
-     *
-     * **Details**
-     *
-     * `constraint` refines the schema node's base generator. `candidate` adds a
-     * weighted source before all filters run. If neither hint is provided, the
-     * filter does not guide generation; generated values are still checked by
-     * the filter predicate.
+     * Regular-expression source and flags used for constructive string generation.
      *
      * @category models
      * @since 4.0.0
      */
-    export interface Filter {
-      readonly constraint?: GenerationConstraint | undefined
-      readonly candidate?: Candidate | undefined
+    export interface Pattern {
+      readonly source: string
+      readonly flags: string
     }
 
     /**
-     * Additional arbitrary source used before final filter checks run.
+     * Normalized generation constraints for a declaration or schema node.
      *
      * **Details**
      *
-     * The base generator keeps weight `1`; candidates default to weight `1`
-     * and must use a positive integer weight. `make` receives the merged
-     * constraint for the current node and may return `undefined` to opt out,
-     * including for recursive terminal branches. Candidate values are still
-     * checked by every schema filter, so invalid candidates affect efficiency but
-     * not validity.
+     * Missing fields are unconstrained. These values guide construction but do not replace Schema validation.
      *
      * @category models
      * @since 4.0.0
      */
-    export interface Candidate {
-      readonly weight?: number | undefined
-      readonly make: (
-        fc: typeof FastCheck,
-        context: Context
-      ) => FastCheck.Arbitrary<unknown> | undefined
-    }
-
-    /**
-     * Ordered constraint accumulated from range checks.
-     *
-     * **Details**
-     *
-     * Generators consume these constraints only when they recognize `order`,
-     * such as `Order.Number`, `Order.BigInt`, DateTime, or BigDecimal. Merging
-     * constraints with different `Order` instances fails fast.
-     *
-     * @category models
-     * @since 4.0.0
-     */
-    export interface OrderedConstraint<T> {
-      readonly order: Order.Order<T>
+    export interface GenerationConstraint<T = unknown> {
       readonly minimum?: T | undefined
-      readonly exclusiveMinimum?: boolean | undefined
+      readonly exclusiveMinimum?: true | undefined
       readonly maximum?: T | undefined
-      readonly exclusiveMaximum?: boolean | undefined
-    }
-
-    /**
-     * Node-local arbitrary-generation constraint accumulated from schema checks.
-     *
-     * **Details**
-     *
-     * `GenerationConstraint` is a generation hint for the current schema AST
-     * node, not a self-describing validation contract. Each generator consumes
-     * the fields it understands for the current node and ignores the rest;
-     * final schema filters still validate every generated value.
-     *
-     * `minLength` and `maxLength` represent node-local cardinality: string
-     * length for strings, array length for arrays, final own-property count for
-     * objects, and final size/cardinality for sets, maps, hash collections, and
-     * chunks. `patterns` are concatenated and used by string generators.
-     * `integer`, `noNaN`, `noInfinity`, and `unique` are true when any
-     * contributing filter sets them. Range bounds live in `ordered` so ordered
-     * values can share the same representation.
-     *
-     * @category models
-     * @since 4.0.0
-     */
-    export interface GenerationConstraint {
+      readonly exclusiveMaximum?: true | undefined
       readonly minLength?: number | undefined
       readonly maxLength?: number | undefined
-      readonly patterns?: readonly [string, ...Array<string>]
-      readonly integer?: boolean | undefined
-      readonly noInfinity?: boolean | undefined
-      readonly noNaN?: boolean | undefined
-      readonly unique?: boolean | undefined
-      readonly ordered?: OrderedConstraint<any> | undefined
+      readonly minSize?: number | undefined
+      readonly maxSize?: number | undefined
+      readonly minProperties?: number | undefined
+      readonly maxProperties?: number | undefined
+      readonly patterns?: readonly [Pattern, ...Array<Pattern>]
+      readonly number?: "finite" | "integer" | undefined
+      readonly uniqueBy?: ((value: any) => unknown) | undefined
     }
 
     /**
-     * Recursion budget passed to arbitrary-derivation hooks.
+     * Raw constraint contribution attached to a Schema filter.
      *
      * **Details**
      *
-     * Pass this object to `fc.oneof` when combining terminal and recursive
-     * branches. Put the terminal branch first because fast-check uses only the
-     * first branch once `maxDepth` is reached for `depthIdentifier`.
+     * `order` identifies the domain while the compiler merges bounds. It is removed before normalized constraints reach
+     * a declaration callback.
      *
      * @category models
      * @since 4.0.0
      */
-    export interface Recursion {
-      readonly maxDepth: number
-      readonly depthIdentifier: FastCheck.DepthIdentifier | string
+    export interface Constraint<T = unknown> extends GenerationConstraint<T> {
+      readonly order?: Order.Order<T> | undefined
     }
 
     /**
-     * Context passed to arbitrary-derivation hooks and candidate factories.
-     *
-     * **Details**
-     *
-     * `constraint` contains the merged constraint for the current schema
-     * node. `recursion` is present while deriving through a suspended schema;
-     * hooks that build recursive alternatives should pass it to `fc.oneof` with
-     * the finite branch first.
+     * Input provided to a declaration's native arbitrary callback.
      *
      * @category models
      * @since 4.0.0
      */
-    export interface Context {
-      readonly constraint?: ToArbitrary.GenerationConstraint | undefined
-      readonly recursion?: ToArbitrary.Recursion | undefined
+    export interface DeclarationInput<
+      T,
+      Parameters extends ReadonlyArray<AnnotationSchemaConstraint>
+    > {
+      readonly typeParameters: TypeParameters.Type<Parameters>
+      readonly constraint: GenerationConstraint<T> | undefined
     }
 
     /**
-     * Arbitrary generators derived for a declaration type parameter.
-     *
-     * **Details**
-     *
-     * `arbitrary` is the normal generator. `terminal` is the finite generator
-     * used while building recursive terminal branches and is `undefined` when
-     * no finite path is known. Optional containers can ignore it; non-empty
-     * containers need it for their terminal branch.
+     * Selects a Schema Link whose source representation is optimized for native arbitrary generation.
      *
      * @category models
      * @since 4.0.0
      */
-    export interface TypeParameter<T> {
-      readonly arbitrary: FastCheck.Arbitrary<T>
-      readonly terminal: FastCheck.Arbitrary<T> | undefined
-    }
-
-    /**
-     * Arbitrary derivation returned by declaration hooks.
-     *
-     * **Details**
-     *
-     * `arbitrary` is the normal generator. `terminal` is an optional finite
-     * branch for recursive schemas. If omitted, it defaults to `arbitrary` only
-     * for declarations without type parameters.
-     *
-     * @category models
-     * @since 4.0.0
-     */
-    export interface Derivation<T> {
-      readonly arbitrary: FastCheck.Arbitrary<T>
-      readonly terminal?: FastCheck.Arbitrary<T> | undefined
-    }
-
-    /**
-     * Output accepted from declaration arbitrary hooks.
-     *
-     * **Details**
-     *
-     * A bare fast-check arbitrary is shorthand for `{ arbitrary }`, useful for
-     * atomic declarations such as URLs. Generic declarations that need precise
-     * recursive behavior should return a {@link Derivation} with `terminal`.
-     *
-     * @category models
-     * @since 4.0.0
-     */
-    export type Output<T> = FastCheck.Arbitrary<T> | Derivation<T>
-
-    /**
-     * Hook signature for declaration schema arbitrary annotations.
-     *
-     * **Details**
-     *
-     * Type parameters expose normal and terminal generators. A declaration with
-     * no type parameters can return a bare arbitrary; a generic declaration
-     * must return `terminal` explicitly when it has a finite branch depending on
-     * parameters.
-     *
-     * @category models
-     * @since 4.0.0
-     */
-    export interface Declaration<T, TypeParameters extends ReadonlyArray<Constraint>> {
-      (
-        /* Arbitrary derivations for any type parameters of the schema (if present) */
-        typeParameters: { readonly [K in keyof TypeParameters]: TypeParameter<TypeParameters[K]["Type"]> }
-      ): (fc: typeof FastCheck, context: Context) => Output<T>
+    export interface Declaration<
+      T,
+      Parameters extends ReadonlyArray<AnnotationSchemaConstraint>
+    > {
+      (input: DeclarationInput<T, Parameters>): SchemaAST.Link
     }
   }
 

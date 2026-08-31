@@ -103,6 +103,21 @@ describe("Channel", () => {
         assert.deepStrictEqual(result, [[0, 1, 1], [2, 3]])
       }))
 
+    it.effect("fromIteratorArray - normalizes the chunk size", () =>
+      Effect.gen(function*() {
+        const results = yield* Effect.forEach([Number.NaN, -1, 0.5, 1.9], (chunkSize) =>
+          Channel.fromIteratorArray(() =>
+            [1, 2, 3][Symbol.iterator](), chunkSize).pipe(
+              Channel.runCollect
+            ))
+        assert.deepStrictEqual(results, [
+          [[1], [2], [3]],
+          [[1], [2], [3]],
+          [[1], [2], [3]],
+          [[1], [2], [3]]
+        ])
+      }))
+
     it.effect("fromIterable", () =>
       Effect.gen(function*() {
         const set = new Set([1, 1, 2, 3])
@@ -117,6 +132,17 @@ describe("Channel", () => {
         const resultChunked = yield* Channel.runCollect(Channel.fromIterableArray(numbers, 4))
         assert.deepStrictEqual(result, [[1, 2, 3, 4, 5]])
         assert.deepStrictEqual(resultChunked, [[1, 2, 3, 4], [5]])
+      }))
+
+    it.effect("fromIterableArray - normalizes the chunk size", () =>
+      Effect.gen(function*() {
+        const results = yield* Effect.forEach([Number.NaN, 0, 2.9], (chunkSize) =>
+          Channel.runCollect(Channel.fromIterableArray([1, 2, 3], chunkSize)))
+        assert.deepStrictEqual(results, [
+          [[1], [2], [3]],
+          [[1], [2], [3]],
+          [[1, 2], [3]]
+        ])
       }))
 
     it.effect("fromReadableStream", () =>
@@ -167,6 +193,29 @@ describe("Channel", () => {
         ).pipe(Channel.runDrain)
         assert.isTrue(yield* Ref.get(acquired))
         assert.isTrue(yield* Ref.get(released))
+      }))
+
+    it.effect("acquireUseRelease combines usage and release failures", () =>
+      Effect.gen(function*() {
+        const result = yield* Channel.acquireUseRelease(
+          Effect.void,
+          () => Channel.fail("usage failure"),
+          () => Effect.die("release failure")
+        ).pipe(Channel.runDrain, Effect.exit)
+        assert.deepStrictEqual(
+          result,
+          Exit.failCause(Cause.combine(Cause.fail("usage failure"), Cause.die("release failure")))
+        )
+      }))
+
+    it.effect("acquireUseRelease surfaces release failure after successful usage", () =>
+      Effect.gen(function*() {
+        const result = yield* Channel.acquireUseRelease(
+          Effect.void,
+          () => Channel.succeed(1),
+          () => Effect.die("release failure")
+        ).pipe(Channel.runDrain, Effect.exit)
+        assert.deepStrictEqual(result, Exit.die("release failure"))
       }))
   })
 

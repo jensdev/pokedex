@@ -3,19 +3,40 @@
  *
  * `RpcSerialization` is the boundary between `RpcMessage` envelopes and the
  * bytes or strings carried by a transport. This module provides built-in
- * serializers for JSON, newline-delimited JSON, JSON-RPC 2.0, and MessagePack,
- * including framed formats that can decode multiple messages from streaming
- * chunks.
+ * serializers for JSON, newline-delimited JSON, JSON-RPC 2.0, and SchemaBinary,
+ * including framed formats that can decode multiple messages
+ * from streaming chunks.
  *
  * @since 4.0.0
  */
-import * as Msgpackr from "msgpackr"
 import * as Context from "../../Context.ts"
 import * as Data from "../../Data.ts"
 import * as Layer from "../../Layer.ts"
 import * as Predicate from "../../Predicate.ts"
 import { hasProperty } from "../../Predicate.ts"
-import type * as RpcMessage from "./RpcMessage.ts"
+import * as Schema from "../../Schema.ts"
+import * as SchemaBinary from "../encoding/SchemaBinary.ts"
+import * as RpcMessage from "./RpcMessage.ts"
+
+/**
+ * Builds the codec used to fill the `unknown` holes of RPC protocol messages,
+ * such as request payloads, stream chunks, exits, and defects.
+ *
+ * **Details**
+ *
+ * The envelope around the hole is framed by {@link Parser}, which never sees the
+ * schema. JSON based serializations return `Schema.toCodecJson`, so the encoded
+ * hole is JSON. Other serializations may encode the hole as bytes; both fit the
+ * `unknown` hole, so `RpcSerialization` has no type parameter.
+ *
+ * @category serialization
+ * @since 4.0.0
+ */
+export type CodecFor = <S extends Schema.Top>(
+  schema: S
+) => Schema.Codec<S["Type"], unknown, S["DecodingServices"], S["EncodingServices"]>
+
+const codecForJson = Schema.toCodecJson as CodecFor
 
 /**
  * Service that describes how RPC protocol messages are encoded and decoded,
@@ -34,6 +55,7 @@ export class RpcSerialization extends Context.Service<RpcSerialization, {
   makeUnsafe(): Parser
   readonly contentType: string
   readonly includesFraming: boolean
+  readonly codecFor: CodecFor
 }>()("effect/rpc/RpcSerialization") {}
 
 /**
@@ -95,6 +117,7 @@ const isBufferSizeExceeded = (
 export const json: RpcSerialization["Service"] = RpcSerialization.of({
   contentType: "application/json",
   includesFraming: false,
+  codecFor: codecForJson,
   makeUnsafe: () => {
     const decoder = new TextDecoder()
     return {
@@ -119,6 +142,7 @@ export const makeNdjson = (options?: StreamOptions): RpcSerialization["Service"]
   return RpcSerialization.of({
     contentType: "application/ndjson",
     includesFraming: true,
+    codecFor: codecForJson,
     makeUnsafe: () => {
       const decoder = new TextDecoder()
       let buffer = ""
@@ -184,6 +208,7 @@ export const jsonRpc = (options?: {
   RpcSerialization.of({
     contentType: options?.contentType ?? "application/json",
     includesFraming: false,
+    codecFor: codecForJson,
     makeUnsafe: () => {
       const decoder = new TextDecoder()
       const batches = new Map<string | number, {
@@ -219,6 +244,7 @@ export const ndJsonRpc = (options?: {
   RpcSerialization.of({
     contentType: options?.contentType ?? "application/json-rpc",
     includesFraming: true,
+    codecFor: codecForJson,
     makeUnsafe: () => {
       const parser = makeNdjson({ maxBufferSize: options?.maxBufferSize }).makeUnsafe()
       const batches = new Map<string, {
@@ -405,8 +431,9 @@ function encodeJsonRpcMessage(response: RpcMessage.FromServerEncoded | RpcMessag
         jsonrpc: "2.0",
         method: response.tag,
         params: response.payload,
-        id: response.id,
-        headers: response.headers,
+        // a JSON-RPC notification is a request without an id
+        ...(response.isNotification ? {} : { id: response.id }),
+        ...(response.headers?.length > 0 ? { headers: response.headers } : {}),
         traceId: response.traceId,
         spanId: response.spanId,
         sampled: response.sampled
@@ -497,70 +524,41 @@ interface JsonRpcResponse {
 
 type JsonRpcMessage = JsonRpcRequest | JsonRpcResponse
 
-/**
- * Create a MessagePack serialization with custom msgpackr options.
- *
- * @category serialization
- * @since 4.0.0
- */
-export const makeMsgPack = (
-  options?: (Msgpackr.Options & StreamOptions) | undefined
-): RpcSerialization["Service"] => {
-  const { maxBufferSize = defaultMaxBufferSize, ...msgpackOptions } = options ?? {}
+const defaultSchemaBinaryMaxFrameSize = 16 * 1024 * 1024
+
+const schemaBinaryTextEncoder = new TextEncoder()
+
+const makeSchemaBinary = (options?: {
+  readonly maxFrameSize?: number | "unbounded" | undefined
+  readonly fingerprintPayloads?: boolean | undefined
+}): RpcSerialization["Service"] => {
+  const maxFrameSize = options?.maxFrameSize === "unbounded"
+    ? undefined
+    : options?.maxFrameSize ?? defaultSchemaBinaryMaxFrameSize
+  const codecFor: CodecFor = options?.fingerprintPayloads === true
+    ? (schema) => SchemaBinary.toCodecDirect(schema, { fingerprint: true })
+    : SchemaBinary.toCodecDirect
+  const envelopeOptions = { fingerprint: true } as const
   return RpcSerialization.of({
-    contentType: "application/msgpack",
+    contentType: "application/vnd.effect.rpc+schema-binary",
     includesFraming: true,
+    codecFor,
     makeUnsafe: () => {
-      const unpackr = new Msgpackr.Unpackr(msgpackOptions)
-      const packr = new Msgpackr.Packr(msgpackOptions)
-      const encoder = new TextEncoder()
-      let incomplete: Uint8Array | undefined = undefined
-      const failMaxBufferSize = (maxBufferSize: number): never => {
-        incomplete = undefined
-        throw new MaxBufferSizeExceeded({ maxBufferSize })
-      }
+      const parser = SchemaBinary.parser(RpcMessage.EncodedSchema, { ...envelopeOptions, maxFrameSize })
+      const encoder = SchemaBinary.encoder(RpcMessage.EncodedSchema, envelopeOptions)
       return {
-        decode(bytes) {
-          let buf = typeof bytes === "string" ? encoder.encode(bytes) : bytes
-          if (incomplete !== undefined) {
-            if (isBufferSizeExceeded(incomplete.length + buf.length, maxBufferSize)) {
-              failMaxBufferSize(maxBufferSize)
-            }
-            const prev = buf
-            bytes = new Uint8Array(incomplete.length + buf.length)
-            bytes.set(incomplete)
-            bytes.set(prev, incomplete.length)
-            buf = bytes
-            incomplete = undefined
+        decode: (data) => parser.feedSync(typeof data === "string" ? schemaBinaryTextEncoder.encode(data) : data),
+        encode: (response) => {
+          if (!Array.isArray(response)) {
+            return encoder.encode(response)
           }
-          try {
-            return unpackr.unpackMultiple(buf)
-          } catch (error_) {
-            const error = error_ as any
-            if (error.incomplete) {
-              incomplete = buf.subarray(error.lastPosition)
-              if (isBufferSizeExceeded(incomplete.length, maxBufferSize)) {
-                failMaxBufferSize(maxBufferSize)
-              }
-              return error.values ?? []
-            }
-            throw error_
-          }
-        },
-        encode: (response) => packr.pack(response)
+          if (response.length === 0) return undefined
+          return encoder.encodeMany(response)
+        }
       }
     }
   })
 }
-
-/**
- * Default MessagePack RPC serialization using record support and built-in
- * message framing.
- *
- * @category serialization
- * @since 4.0.0
- */
-export const msgPack: RpcSerialization["Service"] = makeMsgPack({ useRecords: true })
 
 /**
  * RPC serialization layer that uses JSON for serialization.
@@ -622,24 +620,15 @@ export const layerNdJsonRpc = (options?: {
 }): Layer.Layer<RpcSerialization> => Layer.succeed(RpcSerialization)(ndJsonRpc(options))
 
 /**
- * RPC serialization layer that uses MessagePack for serialization.
- *
- * **Details**
- *
- * MessagePack has a more compact binary format compared to JSON and NDJSON. It
- * also has better support for binary data.
+ * RPC serialization layer that uses SchemaBinary with fingerprinted RPC
+ * envelopes. Payload fingerprints are disabled by default to support compatible
+ * schema evolution. Frames default to a 16 MiB maximum size. Use `"unbounded"`
+ * to disable the frame-size limit.
  *
  * @category layers
  * @since 4.0.0
  */
-export const layerMsgPack: Layer.Layer<RpcSerialization> = Layer.succeed(RpcSerialization)(msgPack)
-
-/**
- * RPC serialization layer that uses MessagePack with custom options.
- *
- * @category layers
- * @since 4.0.0
- */
-export const layerMsgPackWith = (
-  options?: (Msgpackr.Options & StreamOptions) | undefined
-): Layer.Layer<RpcSerialization> => Layer.succeed(RpcSerialization)(makeMsgPack(options))
+export const layerSchemaBinary = (options?: {
+  readonly maxFrameSize?: number | "unbounded" | undefined
+  readonly fingerprintPayloads?: boolean | undefined
+}): Layer.Layer<RpcSerialization> => Layer.sync(RpcSerialization)(() => makeSchemaBinary(options))

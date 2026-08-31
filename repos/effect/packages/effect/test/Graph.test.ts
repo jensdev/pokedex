@@ -67,6 +67,13 @@ describe("Graph", () => {
       assert.strictEqual(Graph.edgeCount(undirectedGraph), 0)
     })
 
+    it("rejects invalid runtime graph kinds", () => {
+      assertGraphError(
+        () => Graph.make("invalid" as Graph.Kind)<never, never>(),
+        "Graph type must be directed or undirected"
+      )
+    })
+
     it("recognizes immutable and mutable graphs only", () => {
       assert.strictEqual(Graph.isGraph(Graph.directed()), true)
       assert.strictEqual(Graph.isGraph(Graph.beginMutation(Graph.undirected())), true)
@@ -540,6 +547,52 @@ describe("Graph", () => {
         assertGraphError(transformation, "Cannot mutate graph during a transformation")
       }
     })
+
+    it("guards read callbacks against nested mutation", () => {
+      const mutable = Graph.beginMutation(directed(["A", "B"], [[0, 1, 1]]))
+      const mutate = () => Graph.addNode(mutable, "C")
+      const operations: ReadonlyArray<() => unknown> = [
+        () =>
+          Graph.findNode(mutable, () => {
+            Graph.findNode(mutable, () => false)
+            mutate()
+            return false
+          }),
+        () => Graph.findNodes(mutable, () => (mutate(), false)),
+        () => Graph.findEdge(mutable, () => (mutate(), false)),
+        () => Graph.findEdges(mutable, () => (mutate(), false)),
+        () => Graph.toGraphViz(mutable, { edgeLabel: (edge) => (mutate(), String(edge)) }),
+        () => Graph.toMermaid(mutable, { nodeShape: () => (mutate(), "rectangle") }),
+        () => Graph.maximumFlow(mutable, { source: 0, target: 1, capacity: (edge) => (mutate(), edge) }),
+        () => Graph.minimumCut(mutable, { source: 0, target: 1, capacity: (edge) => (mutate(), edge) }),
+        () => Graph.dijkstra(mutable, { source: 0, target: 1, cost: (edge) => (mutate(), edge) }),
+        () => Graph.floydWarshall(mutable, (edge) => (mutate(), edge)),
+        () => Graph.astar(mutable, { source: 0, target: 1, cost: (edge) => (mutate(), edge), heuristic: () => 0 }),
+        () => Graph.astar(mutable, { source: 0, target: 1, cost: (edge) => edge, heuristic: () => (mutate(), 0) }),
+        () => Graph.bellmanFord(mutable, { source: 0, target: 1, cost: (edge) => (mutate(), edge) }),
+        () =>
+          Array.from(Graph.allShortestPaths(mutable, {
+            source: 0,
+            target: 1,
+            cost: (edge) => (mutate(), edge)
+          })),
+        () => Array.from(Graph.dfs(mutable, { start: [0] }).visit(() => mutate())),
+        () => Array.from(Graph.nodes(mutable).visit(() => mutate())),
+        () => Array.from(Graph.edges(mutable).visit(() => mutate())),
+        () => Array.from(Graph.externals(mutable).visit(() => mutate()))
+      ]
+
+      for (const operation of operations) {
+        assertGraphError(operation, "Cannot mutate graph during a transformation")
+      }
+
+      const undirectedMutable = Graph.beginMutation(undirected(["A", "B"], [[0, 1, 1]]))
+      assertGraphError(() =>
+        Graph.minimumSpanningForest(undirectedMutable, (edge) => {
+          Graph.addNode(undirectedMutable, "C")
+          return edge
+        }), "Cannot mutate graph during a transformation")
+    })
   })
 
   describe("node operations", () => {
@@ -671,6 +724,39 @@ describe("Graph", () => {
       const nodes = Graph.beginMutation(directed<string, never>(["A", "B"], []))
       Graph.removeNodes(nodes, Graph.indices(Graph.nodes(nodes)))
       assert.strictEqual(Graph.nodeCount(nodes), 0)
+    })
+
+    it("keeps caches fresh when bulk-removal iterables query the graph", () => {
+      const edges = Graph.beginMutation(directed(["A", "B"], [[0, 1, 1]]))
+      Graph.removeEdges(edges, {
+        *[Symbol.iterator]() {
+          assert.strictEqual(Graph.hasPath(edges, 0, 1), true)
+          yield 0
+        }
+      })
+      assert.strictEqual(Graph.hasPath(edges, 0, 1), false)
+
+      const nodes = Graph.beginMutation(directed(["A", "B"], [[0, 1, 1], [1, 0, 2]]))
+      Graph.removeNodes(nodes, {
+        *[Symbol.iterator]() {
+          assert.strictEqual(Graph.isAcyclic(nodes), false)
+          yield 1
+        }
+      })
+      assert.strictEqual(Graph.isAcyclic(nodes), true)
+    })
+
+    it("rejects finalization from bulk-removal iterables", () => {
+      const mutable = Graph.beginMutation(directed(["A", "B"], [[0, 1, 1]]))
+      assertGraphError(() =>
+        Graph.removeEdges(mutable, {
+          *[Symbol.iterator]() {
+            Graph.endMutation(mutable)
+            yield 0
+          }
+        }), "Cannot mutate graph during a transformation")
+      assert.strictEqual(mutable.mutable, true)
+      assert.strictEqual(Graph.edgeCount(mutable), 1)
     })
   })
 
@@ -1062,6 +1148,28 @@ describe("Graph", () => {
       assert.strictEqual(Graph.hasEdge(graph, 1, 0), true)
     })
 
+    it("preserves edge order when merging directed incidence and scanning undirected adjacency", () => {
+      const directedGraph = directed([0, 1, 2], [
+        [0, 1, "out-first"],
+        [2, 0, "in-first"],
+        [0, 0, "loop"],
+        [0, 2, "out-last"],
+        [1, 0, "in-last"]
+      ])
+      assert.deepStrictEqual(Graph.incidentEdges(directedGraph, 0), [0, 1, 2, 3, 4])
+      assert.deepStrictEqual(Graph.edgesBetween(directedGraph, 0, 0), [2])
+
+      const undirectedGraph = undirected([0, 1, 2], [
+        [1, 0, "reverse"],
+        [0, 0, "loop"],
+        [0, 2, "forward"],
+        [2, 0, "reverse-last"]
+      ])
+      assert.deepStrictEqual(Graph.incidentEdges(undirectedGraph, 0), [0, 1, 2, 3])
+      assert.deepStrictEqual(Graph.edgesBetween(undirectedGraph, 0, 2), [2, 3])
+      assert.deepStrictEqual(Graph.edgesBetween(undirectedGraph, 2, 0), [2, 3])
+    })
+
     it("reports directed edge membership without assuming symmetry", () => {
       const graph = directed(["A", "B", "C"], [[0, 1, 1]])
       assert.strictEqual(Graph.hasEdge(graph, 0, 1), true)
@@ -1355,6 +1463,18 @@ describe("Graph", () => {
       assert.strictEqual(Graph.isBipartite(undirected([0], [[0, 0, 1]])), false)
     })
 
+    it("reads fresh mutable structure after bipartite mutations", () => {
+      const mutable = Graph.beginMutation(undirected([0, 1, 2], [[0, 1, 1], [1, 2, 1]]))
+      assert.strictEqual(Graph.isBipartite(mutable), true)
+      Graph.addEdge(mutable, 2, 0, 1)
+      assert.strictEqual(Graph.isBipartite(mutable), false)
+      Graph.removeEdge(mutable, 2)
+      Graph.addEdge(mutable, 0, 1, 1)
+      assert.strictEqual(Graph.isBipartite(mutable), true)
+      Graph.addEdge(mutable, 2, 2, 1)
+      assert.strictEqual(Graph.isBipartite(mutable), false)
+    })
+
     it("returns deterministic maximum matches and the first parallel edge", () => {
       const graph = undirected([0, 1, 2, 3], [[0, 2, "first"], [2, 0, "parallel"], [0, 3, "edge"], [1, 2, "edge"], [
         1,
@@ -1410,6 +1530,10 @@ describe("Graph", () => {
     })
 
     it("rejects directed and non-bipartite graphs", () => {
+      assertGraphError(
+        () => Graph.isBipartite(Graph.directed() as unknown as Graph.UndirectedGraph<never, never>),
+        "Cannot determine bipartite status of directed graph"
+      )
       assertGraphError(
         () => Graph.maximumBipartiteMatching(Graph.directed() as unknown as Graph.UndirectedGraph<never, never>),
         "Cannot find bipartite matching of directed graph"
@@ -1799,24 +1923,6 @@ describe("Graph", () => {
       }
     })
 
-    it("snapshots mutable adjacency before evaluating Dijkstra and A* costs", () => {
-      for (const algorithm of ["dijkstra", "astar"] as const) {
-        const mutable = Graph.beginMutation(directed(["A", "B", "C"], [[0, 1, 1], [1, 2, 1], [0, 2, 3]]))
-        let mutated = false
-        const cost = (edge: number) => {
-          if (!mutated) {
-            mutated = true
-            Graph.removeEdge(mutable, 1)
-          }
-          return edge
-        }
-        const result = algorithm === "dijkstra"
-          ? Graph.dijkstra(mutable, { source: 0, target: 2, cost })
-          : Graph.astar(mutable, { source: 0, target: 2, cost, heuristic: () => 0 })
-        assertPath(result, { path: [0, 1, 2], edges: [0, 1], distance: 2, costs: [1, 1] })
-      }
-    })
-
     it("handles unreachable and same-node paths completely", () => {
       const graph = directed<string, number>(["A", "B"], [])
       const expected = { path: [0], edges: [], distance: 0, costs: [] }
@@ -1953,13 +2059,39 @@ describe("Graph", () => {
       }
       const overflow = directed([0, 1, 2], [[0, 1, Number.MAX_VALUE], [1, 2, Number.MAX_VALUE]])
       assertGraphError(
+        () => Graph.dijkstra(overflow, { source: 0, target: 2, cost: (edge) => edge }),
+        "Dijkstra distance calculation exceeded the finite number range"
+      )
+      assertGraphError(
+        () => Graph.astar(overflow, { source: 0, target: 2, cost: (edge) => edge, heuristic: () => 0 }),
+        "A* distance calculation exceeded the finite number range"
+      )
+      assertGraphError(
+        () =>
+          Graph.astar(directed([0, 1], [[0, 1, Number.MAX_VALUE]]), {
+            source: 0,
+            target: 1,
+            cost: (edge) => edge,
+            heuristic: (node) => node === 1 ? Number.MAX_VALUE : 0
+          }),
+        "A* priority calculation exceeded the finite number range"
+      )
+      assertGraphError(
         () => Graph.bellmanFord(overflow, { source: 0, target: 2, cost: (edge) => edge }),
         "Bellman-Ford distance calculation exceeded the finite number range"
       )
-      const underflow = directed([0, 1], [[0, 1, -Number.MAX_VALUE], [1, 0, -Number.MAX_VALUE]])
       assertGraphError(
-        () => Graph.bellmanFord(underflow, { source: 0, target: 0, cost: (edge) => edge }),
+        () => Graph.floydWarshall(overflow, (edge) => edge),
+        "Floyd-Warshall distance calculation exceeded the finite number range"
+      )
+      const underflow = directed([0, 1, 2], [[0, 1, -Number.MAX_VALUE], [1, 2, -Number.MAX_VALUE]])
+      assertGraphError(
+        () => Graph.bellmanFord(underflow, { source: 0, target: 2, cost: (edge) => edge }),
         "Bellman-Ford distance calculation exceeded the finite number range"
+      )
+      assertGraphError(
+        () => Graph.floydWarshall(underflow, (edge) => edge),
+        "Floyd-Warshall distance calculation exceeded the finite number range"
       )
     })
 
@@ -2124,25 +2256,6 @@ describe("Graph", () => {
       ])
     })
 
-    it("snapshots mutable adjacency before all-shortest-path cost callbacks", () => {
-      const mutable = Graph.beginMutation(directed([0, 1, 2], [[0, 1, 1], [1, 2, 1], [0, 2, 3]]))
-      let mutated = false
-      const paths = Graph.allShortestPaths(mutable, {
-        source: 0,
-        target: 2,
-        cost: (edge) => {
-          if (!mutated) {
-            mutated = true
-            Graph.removeEdge(mutable, 1)
-          }
-          return edge
-        }
-      })
-      assert.deepStrictEqual(Array.from(paths), [
-        { path: [0, 1, 2], edges: [0, 1], distance: 2, costs: [1, 1] }
-      ])
-    })
-
     it("handles empty path enumerations", () => {
       const graph = directed<string, number>(["A", "B"], [])
       const same = [{ path: [0], edges: [], distance: 0, costs: [] }]
@@ -2168,6 +2281,11 @@ describe("Graph", () => {
         () => Array.from(Graph.allShortestPaths(graph, { source: 0, target: 1, cost: (edge) => edge, limit: 0 })),
         "All shortest paths requires non-negative edge weights"
       )
+      const overflow = directed([0, 1, 2], [[0, 1, Number.MAX_VALUE], [1, 2, Number.MAX_VALUE]])
+      assertGraphError(
+        () => Array.from(Graph.allShortestPaths(overflow, { source: 0, target: 2, cost: (edge) => edge })),
+        "All shortest paths distance calculation exceeded the finite number range"
+      )
       assertGraphError(
         () => Graph.simplePaths(graph, { source: 0, target: 1, limit: -1 }),
         "Path enumeration limit must be a non-negative integer or Infinity"
@@ -2185,6 +2303,23 @@ describe("Graph", () => {
       assertIndices(Graph.bfs(graph, { start: [0] }), [0, 1, 2, 3])
       assertIndices(Graph.dfsPostOrder(graph, { start: [0] }), [3, 1, 2, 0])
       assertIndices(Graph.dfs(graph), [])
+    })
+
+    it("preserves postorder with parallel edges, self-loops, and directionless traversal", () => {
+      const parallel = directed([0, 1, 2, 3, 4], [
+        [0, 1, 1],
+        [0, 1, 2],
+        [0, 1, 3],
+        [1, 2, 4],
+        [1, 3, 5],
+        [1, 4, 6],
+        [1, 1, 7]
+      ])
+      assertIndices(Graph.dfsPostOrder(parallel, { start: [0] }), [2, 3, 4, 1, 0])
+      assertIndices(Graph.dfsPostOrder(parallel, { start: [0, 1] }), [2, 3, 4, 1, 0])
+
+      const directionless = directed([0, 1, 2, 3], [[0, 1, 1], [2, 1, 2], [1, 3, 3], [1, 1, 4]])
+      assertIndices(Graph.dfsPostOrder(directionless, { start: [1], direction: "undirected" }), [3, 0, 2, 1])
     })
 
     it("uses shortest distance for radius membership and supports traversal directions", () => {

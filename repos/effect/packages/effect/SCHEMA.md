@@ -952,7 +952,7 @@ type Encoded = {
 type Encoded = typeof schema.Encoded
 ```
 
-If you want the record part to be mutable, you can wrap it in `Schema.mutable`.
+If you want the record part to be mutable, apply `Schema.mutableKey` to its value schema.
 
 **Example** (Allowing dynamic keys to be mutable)
 
@@ -1630,6 +1630,14 @@ const schema = Schema.Tuple([Schema.String, Schema.Number, Schema.Boolean]).mapE
 
 An array schema describes a variable-length list where every element shares the same type.
 
+### Mutability
+
+Array and tuple schemas are readonly by default. Use `Schema.mutable` to make them mutable.
+
+> [!NOTE]
+> `Schema.mutable` does not support an encoding attached directly to the array or tuple schema. Apply it before adding
+> such an encoding. Encodings on element schemas are supported.
+
 ### Unique Arrays
 
 You can deduplicate arrays using `Schema.UniqueArray`.
@@ -2238,7 +2246,7 @@ console.log(String(Schema.decodeUnknownExit(URLSchema)(null)))
 
 ### Adding JSON support with `toCodecJson`
 
-`Schema.toCodecJson` derives a codec that can convert your type **to and from JSON**. By default, declared schemas have no JSON representation — encoding produces `null`:
+`Schema.toCodecJson` derives a codec that can convert your type **to and from JSON**. By default, declared schemas use `Schema.Json` as their encoded representation. This keeps codec derivation defined, but it does not invent a serialization for your custom type. For example, a `URL` instance is not itself a JSON value, so encoding fails:
 
 ```ts
 import { Schema } from "effect"
@@ -2251,10 +2259,9 @@ const URLSchema = Schema.declare(
 // Derive a JSON codec from the schema
 const codec = Schema.toCodecJson(URLSchema)
 
-// Encoding a URL produces null because Schema doesn't know
-// how to serialize a URL to JSON yet
+// Encoding fails because Schema doesn't know how to serialize a URL to JSON yet
 console.log(String(Schema.encodeUnknownExit(codec)(new URL("https://example.com"))))
-// Success(null)
+// Failure(Cause([Fail(SchemaError(Expected JSON value))]))
 ```
 
 To fix this, provide a `toCodecJson` annotation. This annotation is a function that returns an `AST.Link`, a bridge that describes how to convert between your custom type and a JSON-friendly representation.
@@ -2263,6 +2270,8 @@ You build a `Link` using `Schema.link<T>()`, which takes two arguments:
 
 1. **A JSON-side schema** — the shape of the JSON value (e.g. `Schema.String` for a URL string)
 2. **A transformation** — how to convert back and forth between your type and the JSON value
+
+The annotation only defines the link; the consuming parser chooses its execution and failure handling. Transformations may be asynchronous, may fail, and may use optional services, but cannot require services not declared by the input schema.
 
 **Example** (Making `URL` JSON-serializable)
 
@@ -4789,6 +4798,8 @@ A canonical codec describes how values that match a schema should be converted t
 2. **AST transformation**: the codec builder walks the schema AST and produces a new schema that represents the serialized form (this traversal is handled by Effect).
 3. **Recursive composition**: codecs apply through nested structures (objects, arrays, unions, and so on) without you having to wire everything manually.
 
+Canonical codec derivation does not run transformations; the consuming parser chooses execution and failure handling. Annotation links may be asynchronous, may fail, and may use optional services, but cannot add required services absent from the derived codec type. `toCodecIso` declares none, while `toCodecJson` and `toCodecStringTree` preserve the input schema's requirements.
+
 The next example shows why a custom class needs a codec when working with JSON.
 
 **Example** (A custom class that does not round-trip through JSON)
@@ -4810,30 +4821,23 @@ class Point {
 const PointSchema = Schema.instanceOf(Point)
 ```
 
-Even if encoding produces something JSON-looking, decoding cannot rebuild a `Point` instance (including its prototype and methods) from plain JSON data.
+Without an annotation, `Schema.toCodecJson` uses `Schema.Json` as the encoded representation. A `Point` instance is not a JSON value, and a plain object parsed from JSON is not a `Point` instance (including its prototype and methods), so neither direction can bridge the two representations.
 
 ```ts
-// Encode a Point instance using the schema, then stringify it.
-// This produces a plain JSON object, not a class instance.
-const json = JSON.stringify(Schema.encodeUnknownSync(PointSchema)(new Point(1, 2)))
+const codecJson = Schema.toCodecJson(PointSchema)
 
-console.log(json)
-// '{"x":1,"y":2}'
+console.log(String(Schema.encodeUnknownExit(codecJson)(new Point(1, 2))))
+// Failure(Cause([Fail(SchemaError(Expected JSON value))]))
 
-// Decode attempts to create a Point instance from parsed JSON.
-// This fails because JSON.parse returns a plain object, not `new Point(...)`.
-try {
-  Schema.decodeUnknownSync(PointSchema)(JSON.parse(json))
-} catch (error) {
-  console.error(String(error))
-}
+console.log(String(Schema.decodeUnknownExit(codecJson)({ x: 1, y: 2 })))
+// Failure(Cause([Fail(SchemaError(Expected <Declaration>))]))
 ```
 
-The same issue shows up when generating a JSON Schema document: since the schema represents a class instance and there is no JSON representation for it, the generator falls back to a placeholder.
+The same issue shows up when generating a JSON Schema document. Since the opaque declaration has no structural JSON representation, the generator emits an unconstrained JSON Schema:
 
 ```ts
 console.log(Schema.toJsonSchemaDocument(PointSchema))
-// { dialect: 'draft-2020-12', schema: { type: 'null' }, definitions: {} }
+// { dialect: 'draft-2020-12', schema: {}, definitions: {} }
 ```
 
 #### Configuring the Codec
@@ -4917,6 +4921,8 @@ When you call `Schema.toCodecJson(schema)`, the library:
 2. **Finds annotations**: it looks for `toCodecJson` annotations on nodes.
 3. **Applies transformations**: it replaces types that are not JSON-friendly with types that are.
 4. **Composes recursively**: it builds codecs for nested schemas by combining the codecs of their parts.
+
+When this traversal adds a transformation because a node has no direct JSON representation, its checks and annotations remain on the source node; they are not copied to the artificial JSON target. The codec still applies source checks after transforming values.
 
 #### Custom Encodings
 
@@ -5158,6 +5164,11 @@ Output:
 
 To generate a draft-07 JSON Schema, use `JsonSchema.toDocumentDraft07` to convert the draft-2020-12 JSON Schema.
 
+The dialect converters preserve unknown and custom keywords as opaque values. When a known keyword cannot be
+represented by the target dialect, or an opaque keyword would become active and change meaning in that dialect,
+conversion throws instead of silently changing its meaning. For example, Draft-07 cannot represent dynamic
+references, unevaluated constraints, or non-default `minContains` / `maxContains` cardinality.
+
 **Example** (Tuple to draft-7 JSON Schema)
 
 ```ts
@@ -5201,6 +5212,8 @@ Use `.annotate(...)` to attach standard JSON Schema annotations:
 - `examples`
 - `readOnly`
 - `writeOnly`
+
+`Schema.toJsonSchemaDocument` compiles the canonical JSON target. Checks and annotations left on the source side of an artificial transformation therefore do not appear in the generated document. Put metadata on an explicit JSON target when it must appear there.
 
 **Example** (Adding basic annotations)
 
@@ -5369,7 +5382,7 @@ console.log(JSON.stringify(document, null, 2))
 
 #### Defining a JSON-safe representation for custom types
 
-This example shows how `Schema.toCodecJson` and `Schema.toJsonSchema` can describe the same JSON shape for a custom type.
+This example shows how `Schema.toCodecJson` and `Schema.toJsonSchemaDocument` can describe the same JSON shape for a custom type.
 
 `Headers` is not JSON-friendly by default. `JSON.stringify(new Headers({ a: "b" }))` produces `{}` because the header data is not stored in enumerable properties. By adding a `toCodecJson` annotation, you define a JSON-safe representation and use it for both serialization and JSON Schema generation.
 
@@ -5556,371 +5569,6 @@ console.log(JSON.stringify(document, null, 2))
 */
 ```
 
-### Generating an Arbitrary from a Schema
-
-Property-based tests need generators. `Schema.toArbitrary` derives a factory
-that accepts the `fast-check` module and returns an `Arbitrary` that generates
-decoded `Type` values accepted by the schema.
-
-Most schemas do not need any extra work:
-
-```ts
-import { Schema } from "effect"
-import { FastCheck } from "effect/testing"
-
-const Person = Schema.Struct({
-  name: Schema.String,
-  age: Schema.Int.check(Schema.isBetween({ minimum: 18, maximum: 80 }))
-})
-
-const PersonArbitrary = Schema.toArbitrary(Person)(FastCheck)
-
-console.log(FastCheck.sample(PersonArbitrary, 3))
-```
-
-`Schema.Never` and declaration schemas without a `toArbitrary` annotation cannot
-be derived automatically.
-
-#### Filters
-
-Generated values are always checked by the schema filters before they are
-returned. The important question is whether a filter can also help choose a good
-generator.
-
-Built-in filters already do this:
-
-```ts
-import { Schema } from "effect"
-
-const Username = Schema.String.check(
-  Schema.isMinLength(3),
-  Schema.isMaxLength(20),
-  Schema.isPattern(/^[a-z0-9_]+$/)
-)
-
-const PositiveInteger = Schema.Int.check(
-  Schema.isGreaterThanOrEqualTo(1)
-)
-
-const Tags = Schema.Array(Schema.String).check(
-  Schema.isMinLength(1),
-  Schema.isUnique()
-)
-```
-
-For these schemas, `toArbitrary` does not generate random unconstrained strings,
-numbers, or arrays and then hope the filters pass. It uses the length, range,
-pattern, and uniqueness metadata to build a better generator first.
-
-A custom filter without metadata is still correct, but may be inefficient:
-
-```ts
-import { Schema } from "effect"
-
-const isPalindrome = (s: string) => s === Array.from(s).reverse().join("")
-
-const Palindrome = Schema.String.check(
-  Schema.makeFilter(isPalindrome, {
-    expected: "a palindrome"
-  })
-)
-```
-
-This works because the final predicate check rejects strings that are not
-palindromes. It may need many attempts, because the base string generator has no
-reason to produce mirrored strings.
-
-#### Custom Filters With Constraints
-
-If part of a custom filter can be described as a normal generation constraint,
-attach `arbitrary.constraint` to the filter. The constraint does not have to
-prove the whole predicate; it just makes the base generator closer to the values
-the predicate accepts.
-
-```ts
-import { Order, Schema } from "effect"
-
-const isPrimeNumber = (n: number) => {
-  if (!Number.isInteger(n) || n < 2) {
-    return false
-  }
-  for (let divisor = 2; divisor * divisor <= n; divisor++) {
-    if (n % divisor === 0) {
-      return false
-    }
-  }
-  return true
-}
-
-const prime = Schema.makeFilter(isPrimeNumber, {
-  expected: "a prime number",
-  arbitrary: {
-    constraint: {
-      integer: true,
-      ordered: {
-        order: Order.Number,
-        minimum: 2
-      }
-    }
-  }
-})
-
-const Prime = Schema.Number.check(prime)
-```
-
-The filter still checks primality. The constraint only tells `toArbitrary` not
-to waste time on non-integers or numbers below `2`.
-
-Think of `constraint` as a small vocabulary that the current schema node can
-understand:
-
-- On strings, `minLength` and `maxLength` mean string length.
-- On arrays, `minLength` and `maxLength` mean array length.
-- On objects, `minLength` and `maxLength` mean final own-property count.
-- On sets, maps, hash collections, and chunks, `minLength` and `maxLength` mean final collection size.
-- `patterns` apply to string generation.
-- `integer`, `noNaN`, `noInfinity`, `valid`, and `unique` are enabled when any contributing filter sets them.
-- `ordered` stores bounds for ordered values such as numbers, bigints, dates, `DateTime`, and `BigDecimal`.
-
-Fields that do not make sense for the current node are ignored. The final filter
-check still validates every generated value.
-
-#### Custom Filters With Candidates
-
-Use a candidate when the filter cannot be expressed with the constraint
-vocabulary.
-
-```ts
-import { Schema } from "effect"
-
-const reverse = (s: string) => Array.from(s).reverse().join("")
-
-const isPalindrome = (s: string) => s === reverse(s)
-
-const palindrome = Schema.makeFilter(
-  isPalindrome,
-  {
-    expected: "a palindrome",
-    arbitrary: {
-      candidate: {
-        weight: 5,
-        make: (fc) => fc.string().map((half) => `${half}${reverse(half)}`)
-      }
-    }
-  }
-)
-
-const Palindrome = Schema.String.check(palindrome)
-```
-
-A candidate is an extra source used together with the schema node's base
-generator. The base generator has weight `1`. A candidate has weight `1` unless
-you set another positive integer weight.
-
-With one candidate at weight `5`, fast-check tries the candidate roughly five
-times as often as the base generator. Candidate values are still checked by all
-filters, so a bad candidate can waste attempts but cannot produce invalid
-values.
-
-`make` receives the arbitrary context and may return `undefined` when the
-candidate should not be used for that context.
-
-#### Schema-Level Overrides
-
-Use a `toArbitrary` annotation when you want to replace the generator for a
-schema node.
-
-The annotation is not limited to declaration schemas. You can attach it to a
-normal schema with `.annotate(...)`:
-
-```ts
-import { Schema } from "effect"
-
-const Name = Schema.String.annotate({
-  toArbitrary: () => (fc) => fc.constantFrom("Alice", "Bob", "Carol")
-})
-```
-
-Put override annotations on base schemas when possible, before adding filters:
-
-```ts
-const Name = Schema.String.annotate({
-  toArbitrary: () => (fc) => fc.constantFrom("Alice", "Bob", "Carol")
-}).check(Schema.isMinLength(1))
-```
-
-This shape is easier to reason about. The override provides the base generator;
-the filter remains a normal filter. Schema still checks generated values at the
-end.
-
-Avoid putting an override on a schema that already has filters unless the
-override intentionally handles those filters too:
-
-```ts
-const Name = Schema.String.check(Schema.isMinLength(1)).annotate({
-  toArbitrary: () => (fc) => fc.constant("")
-})
-```
-
-This is valid TypeScript, but it is a bad generator: it always generates a value
-that the filter rejects.
-
-The second argument of a `toArbitrary` hook is the arbitrary context. Its
-`constraint` field contains constraints collected from filters on the same
-schema node as the override. If the override is placed before `.check(...)`, the
-context does not include the later filters. If the override is placed after
-`.check(...)`, the context includes those filters and the override must respect
-them.
-
-`context.recursion` is present while deriving inside a recursive schema.
-
-#### Declaration Schemas
-
-Declaration schemas are opaque to Schema. If you define one, provide a
-`toArbitrary` hook.
-
-For an atomic declaration, return a normal `fast-check` arbitrary:
-
-```ts
-import { Schema } from "effect"
-
-const Url = Schema.instanceOf(globalThis.URL, {
-  title: "URL",
-  toArbitrary: () => (fc) => fc.webUrl().map((s) => new globalThis.URL(s))
-})
-```
-
-Generic declarations receive one derivation per type parameter:
-
-- `arbitrary`: the normal generator for the type parameter.
-- `terminal`: a finite generator for the type parameter, used to close recursive generation.
-
-For an opaque wrapper type, you usually map both sources in the same way:
-
-```ts
-import { Effect, Schema, SchemaIssue, SchemaParser } from "effect"
-
-class Box<A> {
-  private constructor(private readonly value: A) {}
-
-  static make<A>(value: A): Box<A> {
-    return new Box(value)
-  }
-
-  static unbox<A>(box: Box<A>): A {
-    return box.value
-  }
-}
-
-const isBox = (u: unknown): u is Box<unknown> => u instanceof Box
-
-const BoxSchema = <A extends Schema.Top>(value: A) =>
-  Schema.declareConstructor<Box<A["Type"]>, Box<A["Encoded"]>>()(
-    [value],
-    ([valueCodec]) => (input, ast, options) => {
-      if (!isBox(input)) {
-        return Effect.fail(new SchemaIssue.InvalidType(ast, input, options))
-      }
-      return Effect.map(
-        SchemaParser.decodeUnknownEffect(valueCodec)(Box.unbox(input), options),
-        Box.make
-      )
-    },
-    {
-      toArbitrary: ([value]) => () => ({
-        arbitrary: value.arbitrary.map(Box.make),
-        terminal: value.terminal?.map(Box.make)
-      })
-    }
-  )
-```
-
-This looks like duplicated code, but it is not the same generator twice. It is
-the same opaque constructor applied to two different sources.
-
-Suppose someone later builds a recursive schema like this:
-
-```ts
-interface Tree<A> {
-  readonly value: A
-  readonly children: ReadonlyArray<Tree<A>>
-}
-
-type BoxedTree<A> = Box<Tree<A>>
-```
-
-`Box` does not know whether `A` is recursive. If `A` is `Tree<A>`, then
-`value.arbitrary` may generate a recursive tree, while `value.terminal` is the
-finite tree generator used when the recursion budget is exhausted. Mapping both
-sources through `Box.make` preserves that information. If `Box` returned only
-`arbitrary`, it would hide the finite path from outer recursive schemas.
-
-If the type parameter has no finite terminal generator, `value.terminal` is
-`undefined`, and the wrapper cannot provide a terminal branch either.
-
-#### Integration with Synthetic Data Generation Tools
-
-Synthetic data libraries such as `@faker-js/faker` are useful when the generated
-values should look realistic. Put them behind a Fast-Check arbitrary instead of
-calling them directly, so Fast-Check still controls randomness and shrinking.
-
-```ts
-import { faker } from "@faker-js/faker"
-import { Schema } from "effect"
-import { FastCheck } from "effect/testing"
-
-/**
- * Make it easy to plug a Faker generator into a Schema's `toArbitrary` override.
- * The seed comes from Fast-Check so data is reproducible and shrinks correctly.
- */
-function fake<A>(
-  gen: (f: typeof faker) => A
-): Schema.Annotations.ToArbitrary.Declaration<A, readonly []> {
-  return () => (fc) =>
-    fc.nat().map((seed) => {
-      faker.seed(seed)
-      return gen(faker)
-    })
-}
-
-const FirstName = Schema.String.annotate({
-  toArbitrary: fake((faker) => faker.person.firstName())
-})
-
-const LastName = Schema.String.annotate({
-  toArbitrary: fake((faker) => faker.person.lastName())
-})
-
-const JobTitle = Schema.String.annotate({
-  toArbitrary: fake((faker) => faker.person.jobTitle())
-})
-
-const Company = Schema.String.annotate({
-  toArbitrary: fake((faker) => faker.company.name())
-})
-
-const Person = Schema.Struct({
-  firstName: FirstName,
-  lastName: LastName,
-  jobTitle: JobTitle,
-  company: Company
-})
-
-console.log(FastCheck.sample(Schema.toArbitrary(Person)(FastCheck), 3))
-```
-
-These overrides are useful because the values have domain shape: names look like
-names, job titles look like job titles, and companies look like companies. For
-plain numeric ranges, prefer Schema constraints and the default arbitrary
-derivation.
-
-If you combine a Faker source with filters, put the override on the base schema
-first and add filters afterwards. This keeps the responsibilities simple: the
-override chooses a realistic source, and the filter remains the final validation
-rule. If you put the override after `.check(...)`, the override must respect
-those filters itself, or generation will spend time producing values that are
-rejected.
-
 ### Generating an Equivalence from a Schema
 
 An equivalence function checks whether two values are structurally equal according to the schema's definition. Schema derives this automatically, so you do not need to write manual comparison logic.
@@ -6031,7 +5679,7 @@ console.log(_s.replace("b", new B({ a: new A({ s: "a" }) })))
 // B { a: A { s: 'b' } }
 ```
 
-Reading through the generated `Iso` encodes the schema value, while replacing through it decodes the new focus. Either direction can throw an `Error` with the generic message `"Schema validation failed"` and a `SchemaIssue.Issue` in its `cause`. Use `SchemaIssue.makeFormatterDefault()` to format that cause when human-readable details are needed.
+Reading through the generated `Iso` encodes the schema value, while replacing through it decodes the new focus. `Schema.toIso` consumes `Schema.toCodecIso` synchronously, so failing, asynchronous, or service-dependent transformations can throw. Schema failures use `"Schema validation failed"` with a `SchemaIssue.Issue` in `cause`; format it with `SchemaIssue.makeFormatterDefault()`, or use an effectful parser with `Schema.toCodecIso` for asynchronous execution or explicit failure handling.
 
 ### Using the Differ Module for Type-Safe JSON Patches
 
@@ -6112,7 +5760,7 @@ The idea is simple: if you have a `Schema` for a type `T`, you can serialize any
 
 This approach keeps patches independent from TypeScript types and uses the schema as the guardrail when turning JSON back into `T`.
 
-Schema conversion failures from `diff` or `patch` throw an `Error` with the generic message `"Schema validation failed"` and a `SchemaIssue.Issue` in its `cause`. Format that cause explicitly with `SchemaIssue.makeFormatterDefault()`. Errors raised while applying an invalid JSON Patch operation are separate `JsonPatch` errors rather than schema validation failures.
+`Schema.toDifferJsonPatch` consumes `Schema.toCodecJson` synchronously, so failing, asynchronous, or service-dependent transformations can throw. Schema failures use `"Schema validation failed"` with a `SchemaIssue.Issue` in `cause`, which `SchemaIssue.makeFormatterDefault()` can format; invalid patch operations instead produce `JsonPatch` errors.
 
 # Schema Representation
 
@@ -6261,19 +5909,63 @@ const multiDocument = SchemaRepresentation.toRepresentations([
 ])
 ```
 
-Repeated structural nodes, identifiers, and recursive schemas are placed in `references`. Repeated `Suspend` and
-`Declaration` nodes are reference candidates as well. For unions, enums, template literals, and string literals, the
-converter uses an inexpensive size estimate and creates an anonymous reference only when it expects the reference to be
-smaller than repeating the body. `toMultiDocument(document)` wraps a single document when a compiler requires multiple
-roots.
+By default, only candidates with a resolved identifier are placed in `references`. Anonymous non-recursive nodes remain
+inline even when the same AST occurs more than once. Recursive schemas always require a reference; when no identifier is
+available, the converter assigns a synthetic name such as `Objects_` or `Suspend_`.
 
-An explicit `identifier` requests a reference name within a conversion. Reusing the same schema shares its reference.
+The default policy uses an explicit `identifier` as the reference name. Reusing the same schema shares its reference.
 Context-only copies created through `SchemaAST.replaceContext` retain the original AST as their reference owner, including
-across several successive context changes. Context still belongs to each occurrence and does not, by itself, make a node a
-reference candidate. Independently constructed ASTs are not canonicalized merely because their other fields contain the
-same references. When distinct schemas request the same name, the first schema keeps it and later schemas receive numeric
-suffixes in encounter order, such as `Value_1` and `Value_2`. Internal `~identifier` annotations are fallback allocation
-hints; their generated names use the `Encoded` suffix and follow the same collision rules.
+across several successive context changes. Context still belongs to each occurrence and does not, by itself, create a new
+candidate. Independently constructed ASTs are not canonicalized merely because they are structurally equal. When distinct
+schemas request the same name, the first schema keeps it and later schemas receive numeric suffixes in encounter order,
+such as `Value_1` and `Value_2`. Internal `~identifier` annotations are fallback allocation hints; their generated names
+use the `Encoded` suffix and follow the same collision rules.
+
+`toMultiDocument(document)` wraps a single document when a compiler requires multiple roots.
+
+### Reference policies
+
+`Schema.toRepresentation`, `SchemaRepresentation.toRepresentation`, and `SchemaRepresentation.toRepresentations` accept
+an optional `referencePolicy`. The policy runs once for every candidate, after occurrences across all roots have been
+counted:
+
+```ts
+interface ReferencePolicyInput {
+  readonly ast: SchemaAST.AST
+  readonly occurrences: number
+  readonly identifier: string | undefined
+}
+```
+
+Return a reference name to move the candidate into `references`, or return `undefined` to leave it inline. This example
+extracts anonymous candidates only when the same candidate occurs more than once, while still respecting identifiers:
+
+```ts
+import { Schema, SchemaRepresentation } from "effect"
+
+const Item = Schema.Struct({ name: Schema.String })
+
+const document = SchemaRepresentation.toRepresentations([Item.ast, Item.ast], {
+  referencePolicy: ({ ast, identifier, occurrences }) => identifier ?? (occurrences > 1 ? `${ast._tag}_` : undefined)
+})
+
+console.log(document.representations)
+// [
+//   { _tag: "Reference", $ref: "Objects_" },
+//   { _tag: "Reference", $ref: "Objects_" }
+// ]
+```
+
+Occurrences are counted by candidate identity, not structural equality. Two independently constructed but structurally
+equal ASTs are separate candidates and each reports one occurrence. Recursive candidates cannot remain inline: if a policy
+returns `undefined` for one, the converter assigns a synthetic reference name. If different candidates request the same
+name, later candidates receive numeric suffixes.
+
+`Schema.toJsonSchemaDocument(schema, options)` forwards the policy after deriving the schema's canonical JSON codec, so
+the policy receives canonical JSON-encoded ASTs. `OpenApi.fromApi(api, options)` applies the policy at the same canonical
+JSON boundary when deciding which schemas become OpenAPI components. A `referencePolicy` passed to
+`SchemaRepresentation.toJsonSchemaDocument` or `toJsonSchemaMultiDocument` cannot change an existing document's references;
+pass it while creating the `Document` or `MultiDocument` instead.
 
 ## JSON persistence
 
@@ -6373,9 +6065,10 @@ The same reviver can then be included in the `revivers` array passed to `fromRep
 ### Exporting JSON Schema
 
 For a runtime schema, prefer `Schema.toJsonSchemaDocument(schema)`. It first derives the schema's canonical JSON codec,
-then compiles its encoded representation to JSON Schema Draft 2020-12. During this high-level conversion, declarations
-are not extracted into anonymous references: their JSON Schema body is unconstrained, and leaving it inline preserves
-empty-schema simplifications. Explicit and recursive references are unaffected.
+then compiles its encoded representation to JSON Schema Draft 2020-12. The default reference policy extracts candidates
+with resolved identifiers and leaves anonymous non-recursive candidates inline, including repeated declarations. Recursive
+candidates still receive references, using a synthetic name when necessary. Pass `referencePolicy` in the options to use a
+different allocation rule.
 
 At the lower level, `SchemaRepresentation.toJsonSchemaDocument(document)` compiles a live `Document`, and
 `toJsonSchemaMultiDocument` compiles a live `MultiDocument`. Check-level `toJsonSchema` callbacks contribute JSON Schema
@@ -6399,15 +6092,27 @@ schema with revivers first.
 `SchemaRepresentation.fromJsonSchemaDocument` imports a JSON Schema Draft 2020-12 document as a runtime `Schema.Top`.
 It does not return a representation document.
 
+Only direct local references to top-level definitions in the form `#/$defs/<escaped-token>` are supported. Root
+references, external references, and pointers below a definition throw an `Unsupported reference` error. A direct
+reference to a missing definition throws an `Invalid reference` error.
+
 `fromJsonSchemaMultiDocument` returns the ordered root schemas. It translates only definitions reachable from those
 roots. To pass the result to a representation compiler, call `toRepresentations` with the returned schemas' ASTs.
 
-Import is best-effort: JSON Schema constructs are translated to Effect schemas where possible, but the result is not a
-lossless reconstruction of an original Effect schema. The optional `onEnter` callback can normalize each JSON Schema node
+Import translates a Draft 2020-12 subset. `$dynamicRef`, `contains`, `dependentRequired`, `dependentSchemas`, `not`,
+active `if` / `then` / `else`, `unevaluatedItems`, and `unevaluatedProperties` throw an
+`Unsupported JSON Schema keyword` error. Inactive conditional keywords and `minContains` / `maxContains` without
+`contains` have no validation effect and are ignored. Unknown extension keywords are ignored and their semantics are not
+enforced. Objects and arrays used as `const` values or `enum` members throw an
+`Unsupported structured JSON Schema value` error. The optional `onEnter` callback can normalize each JSON Schema node
 before it is translated.
 
-Regular expression constraints reached during best-effort translation are rejected by default because imported patterns
-use the runtime's native regular expression engine and may block validation for an unbounded amount of time. Set
+Intersections of overlapping unions are limited to disjoint root-type partitions and finite primitive `anyOf` literal
+sets. Other union intersections, including cases that would duplicate a nested choice, throw an
+`Unsupported intersection of overlapping unions` error.
+
+Regular expression constraints reached during translation are rejected by default because imported patterns use the
+runtime's native regular expression engine and may block validation for an unbounded amount of time. Set
 `patterns: "apply"` only for trusted documents. Set `patterns: "ignore"` to skip reached pattern constraints explicitly;
 the resulting schema accepts values that the source document may reject. The policy includes `pattern`, the keys of
 `patternProperties`, and patterns nested in `propertyNames`. Ignoring `patternProperties` also skips its value constraints
