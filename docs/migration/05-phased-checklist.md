@@ -111,20 +111,38 @@ Notes from executing this phase:
   `HttpRouter.toHttpEffect(AllRoutes)` to assert 200s, content types, and that
   `/openapi.json` and `/docs` are mounted.
 
-## Phase 4 — Domain + repository
+## Phase 4 — Domain + repository ✅
 
 No HTTP in this phase; pure Effect.
 
-- [ ] `src/domain/Errors.ts` (`PokemonNotFound`, `PokemonDataParse`)
-- [ ] `src/domain/Pokemon.ts` (`makeVariant` / `replaceVariant` pure functions implementing
+- [x] `src/domain/Errors.ts` (`PokemonNotFound`, `PokemonDataParse`)
+- [x] `src/domain/Pokemon.ts` (`makeVariant` / `replaceVariant` pure functions implementing
       the default/preservation rules from the behavior spec — including quirk P2)
-- [ ] `src/services/seed.ts` — the 4 seed Pokémon, byte-identical values to the old constants
-- [ ] `src/services/PokemonRepository.ts` — port + `layerInMemory` (Ref store, ID sequence
+- [x] `src/services/seed.ts` — the 4 seed Pokémon, byte-identical values to the old constants
+- [x] `src/services/PokemonRepository.ts` — port + `layerInMemory` (Ref store, ID sequence
       from 1026, flaky `fetchAll` behind `FLAKY_UPSTREAM_RATE`)
-- [ ] Unit tests for `makeVariant`/`replaceVariant` (all three classifications, change vs.
+- [x] Unit tests for `makeVariant`/`replaceVariant` (all three classifications, change vs.
       keep classification) and repository (save/replace/remove/nextId)
-- [ ] Verify: `npm run check` green
-- [ ] Commit
+- [x] Verify: `npm run check` green
+- [x] Commit
+
+Notes from executing this phase:
+
+- **`Option.fromNullishOr` takes one argument** in the installed rc, not the two the
+  repository snippet in [04-implementation-patterns.md](04-implementation-patterns.md#2-repository-port--in-memory-adapter--servicespokemonrepositoryts)
+  shows (`(value, null)`). The doc snippet is otherwise accurate; it has been corrected there.
+- **`makeVariant`/`replaceVariant` use a classification-keyed record, not a `switch`.**
+  oxlint's `typescript(consistent-return)` fires on a `switch` that returns from every arm
+  of an exhaustive union with no `default`, and adding a `default` would silently swallow a
+  fourth classification. Indexing `createdExtras[input.classification]` keeps exhaustiveness
+  as a compile error (a new contract classification has no entry) with no dead branch.
+- **Replace never carries `evolvesInto` or `mascotForGames`.** The NestJS `ReplacePokemonCommand`
+  rebuilt the variant from the payload plus the scalar extras only, so both collections were
+  dropped on every replace. Kept for parity and documented on `replaceVariant`.
+- Repository tests provide `FLAKY_UPSTREAM_RATE` through
+  `ConfigProvider.layer(ConfigProvider.fromEnvRecord(...))` and provide the repository layer
+  per test with `Effect.provide(layer, { local: true })` — layers are memoized between
+  `provide` calls by default, which would leak one test's store and id sequence into the next.
 
 ## Phase 5 — Pokedex read endpoints
 

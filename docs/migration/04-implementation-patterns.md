@@ -70,7 +70,7 @@ export class PokemonRepository extends Context.Service<PokemonRepository, {
         }),
         findById: (id) =>
           Ref.get(store).pipe(
-            Effect.map((all) => Option.fromNullishOr(all.find((p) => p.id === id), null))
+            Effect.map((all) => Option.fromNullishOr(all.find((p) => p.id === id)))
           ),
         nextId: Ref.getAndUpdate(idSequence, (n) => n + 1),
         save: (pokemon) =>
