@@ -22,10 +22,11 @@ NestJS app.
 First, refresh the vendored Effect reference (the subtree and the npm pins must always move
 together — the subtree is the API reference all Effect code is verified against):
 
-- [ ] `git subtree pull --prefix repos/effect https://github.com/Effect-TS/effect.git main --squash`
-- [ ] Read the new version from `repos/effect/packages/effect/package.json` and update every
-      `4.0.0-rc.110` pin reference in `docs/migration/03-toolchain.md` and `docs/migration/README.md`
-- [ ] Re-run the generator smoke test against the new rc:
+- [x] `git subtree pull --prefix repos/effect https://github.com/Effect-TS/effect.git main --squash`
+- [x] Read the new version from `repos/effect/packages/effect/package.json` and update every
+      Effect pin reference in the migration docs (`03-toolchain.md`, `README.md`,
+      `04-implementation-patterns.md`, and the Phase 2 pin below) to that version
+- [x] Re-run the generator smoke test against the new rc:
       `npx @effect/openapi-generator@rc --spec tsp-output/openapi.yaml --format httpapi --name PokedexApi`
 
 Then the contract fix itself:
@@ -44,7 +45,7 @@ Then the contract fix itself:
 - [ ] Delete `src/` entirely (including `src/generated` hey-api output), `nest-cli.json`,
       `tsconfig.build.json`, `openapi-ts.config.ts`, `patches/`, jest config in `package.json`
 - [ ] Rewrite `package.json` per [03-toolchain.md](03-toolchain.md#target-packagejson)
-      (pinned `4.0.0-rc.110`), delete `package-lock.json`, `npm install`
+      (pinned `4.0.0-rc.112`), delete `package-lock.json`, `npm install`
 - [ ] New `tsconfig.json` / `tsconfig.build.json` per 03-toolchain.md
 - [ ] Keep: `tsp/`, `tspconfig.yaml`, `tsp-output/`, `docs/`, `repos/effect`, eslint/prettier
       (trim NestJS-specific eslint rules)

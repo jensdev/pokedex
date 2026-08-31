@@ -1,6 +1,6 @@
 # Implementation Patterns (Effect 4.0 RC)
 
-All snippets below use APIs verified against `repos/effect` at `4.0.0-rc.110`. Import paths
+All snippets below use APIs verified against `repos/effect` at `4.0.0-rc.112`. Import paths
 to remember:
 
 ```ts

@@ -27,7 +27,7 @@ TypeSpec contract in `tsp/` as the single source of truth.
 
 | Decision | Choice | Why |
 | --- | --- | --- |
-| Effect version | Pin exact `4.0.0-rc.110` | Matches the vendored source in `repos/effect` used as the API reference; RC releases can break between versions |
+| Effect version | Pin exact `4.0.0-rc.112` | Matches the vendored source in `repos/effect` used as the API reference; RC releases can break between versions |
 | Generator | `@effect/openapi-generator` (`openapigen`), format `httpapi` | Generates `HttpApi`/`HttpApiGroup`/`HttpApiEndpoint` + `Schema` models directly from `tsp-output/openapi.yaml` — validated end-to-end against this repo's spec |
 | Contract change | Replace `extends Pokemon` + `@discriminator` with `...spread` composition in `tsp/models/pokemon.tsp` | The generator collapses `allOf`-inheritance schemas to `Schema.Never` (verified). Spread emits self-contained variant schemas, which generate a correct discriminated union (verified). Wire format is unchanged |
 | HTTP platform | `@effect/platform-node` (`NodeHttpServer` + `node:http`) | Node is the current deployment target; Bun swap is a one-line change in `main.ts` |
