@@ -42,7 +42,7 @@ to `tsp/models/pokemon.tsp` in Phase 1 — see
     "prettier": "^3.4.2",
     "tsx": "^4.19.0",
     "typescript": "^5.7.3",
-    "vitest": "^3.0.0"
+    "vitest": "^4.1.0"
   }
 }
 ```
@@ -53,6 +53,8 @@ Notes:
   source in `repos/effect`. Bump all four together, then rerun `npm run generate && npm run check`.
 - `openapigen` is the bin shipped by `@effect/openapi-generator`. It writes generated source
   to **stdout** (warnings go to stderr), hence the redirect.
+- `vitest` must be **`^4.1.0`** — `@effect/vitest@4.0.0-rc.112` declares
+  `peer vitest ">=4.1.0 <5.0.0"`, so `npm install` fails on vitest 3.
 - The generator accepts `.yaml` specs directly; no JSON conversion step is needed.
 - `--patch` accepts RFC-6902 JSON patches (file or inline) applied to the spec before
   generation — the escape hatch if a contract construct ever generates poorly and the `.tsp`
@@ -99,6 +101,24 @@ options:
 
 (`tsconfig.build.json` extends it and excludes `test/`. Imports use NodeNext `.js`
 specifiers; `tsx` handles them in dev.)
+
+## `vitest.config.ts`
+
+```ts
+import { defineConfig } from 'vitest/config';
+
+export default defineConfig({
+  test: {
+    include: ['src/**/*.test.ts'],
+    passWithNoTests: true,
+  },
+});
+```
+
+This file is **not optional**. With no explicit `include`, `vitest run` discovers the ~440
+test files in the vendored `repos/effect` reference subtree and hangs. Tests are colocated
+under `src/` (`src/**/*.test.ts`) so `tsc --noEmit` type-checks them while
+`tsconfig.build.json` excludes them from `dist/`.
 
 ## Required contract fix: discriminated union
 

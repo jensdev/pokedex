@@ -1,5 +1,16 @@
 # Agent Instructions: Nest Pokemon
 
+> ⚠️ **OUT OF DATE — describes the deleted NestJS implementation.**
+> The NestJS code this document describes (`src/pokemon/`, `src/health/`, `ZodPipe`,
+> `@praha/byethrow`, CQRS controllers) was removed in Phase 2 of the Effect migration, along
+> with `.agents/`. Until this file is rewritten in Phase 7, treat
+> [docs/migration/](./docs/migration/) as authoritative — in particular
+> [02-target-architecture.md](./docs/migration/02-target-architecture.md),
+> [04-implementation-patterns.md](./docs/migration/04-implementation-patterns.md), and
+> [05-phased-checklist.md](./docs/migration/05-phased-checklist.md). The only rule below that
+> still holds unchanged is **Schema-First**: contract changes start in `tsp/`, and
+> `src/generated/` is never hand-edited.
+
 This repository contains instructions for AI agents (like Gemini, Claude, or GitHub Copilot) to ensure they follow the project's architectural patterns and conventions.
 
 ## Documentation
