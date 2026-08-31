@@ -5,8 +5,9 @@ tsp/*.tsp ──tsp compile──▶ tsp-output/openapi.yaml ──openapigen (h
 ```
 
 The full pipeline has been **validated against this repo's actual spec** with
-`@effect/openapi-generator@4.0.0-rc.112` (2026-08-31). One contract fix is required first —
-see [Required contract fix](#required-contract-fix-discriminated-union).
+`@effect/openapi-generator@4.0.0-rc.112` (2026-08-31). It required one contract fix, applied
+to `tsp/models/pokemon.tsp` in Phase 1 — see
+[Required contract fix](#required-contract-fix-discriminated-union).
 
 ## Target `package.json`
 
@@ -111,10 +112,15 @@ intersections to `Schema.Never`, producing:
 export const PokemonVariant = Schema.Union([Schema.Never, Schema.Never, Schema.Never])
 ```
 
-**Fix (verified):** compose with spread instead of inheritance. Each variant becomes a
+**Fix (applied in Phase 1):** compose with spread instead of inheritance. Each variant becomes a
 self-contained object schema; the union generates a correct three-member discriminated union
-with zero `Schema.Never`. The wire format of every payload is unchanged (the OpenAPI
-`discriminator` metadata disappears, which no consumer of this API uses).
+with zero `Schema.Never`. The wire format of every payload is unchanged — verified by
+expanding each variant's `allOf` before/after: identical `properties` and `required`, and
+every other schema and path byte-identical. Two things do change in the emitted OpenAPI,
+neither of them on the wire: the `discriminator` metadata disappears (no consumer of this
+API uses it), and the now-unreachable `Pokemon` component is dropped by
+`omit-unreachable-types`. `PokemonVariant` was already an `anyOf` of the three refs and
+stays one.
 
 ```tsp
 // BEFORE                                    // AFTER

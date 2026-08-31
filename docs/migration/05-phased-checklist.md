@@ -14,7 +14,7 @@ not done until they pass.
       (found + solved the `allOf` → `Schema.Never` union collapse)
 - [x] Commit docs to the repo
 
-## Phase 1 — Contract fix (TypeSpec)
+## Phase 1 — Contract fix (TypeSpec) ✅
 
 Do this **before** teardown so the contract change is reviewable against the still-running
 NestJS app.
@@ -31,14 +31,14 @@ together — the subtree is the API reference all Effect code is verified agains
 
 Then the contract fix itself:
 
-- [ ] Refactor `tsp/models/pokemon.tsp`: replace `@discriminator` + `extends` with
+- [x] Refactor `tsp/models/pokemon.tsp`: replace `@discriminator` + `extends` with
       `PokemonBase` + `...spread` per [03-toolchain.md](03-toolchain.md#required-contract-fix-discriminated-union)
-- [ ] `npm run typespec:compile` — regenerate `tsp-output/openapi.yaml`
-- [ ] Verify: `NormalPokemon`/`LegendaryPokemon`/`MythicalPokemon` in the emitted YAML are
+- [x] `npm run typespec:compile` — regenerate `tsp-output/openapi.yaml`
+- [x] Verify: `NormalPokemon`/`LegendaryPokemon`/`MythicalPokemon` in the emitted YAML are
       self-contained objects (no `allOf`), `PokemonVariant` is an `anyOf` of the three refs
-- [ ] Verify: `npx @effect/openapi-generator@rc --spec tsp-output/openapi.yaml --format httpapi --name PokedexApi`
+- [x] Verify: `npx @effect/openapi-generator@rc --spec tsp-output/openapi.yaml --format httpapi --name PokedexApi`
       output contains **zero** `Schema.Never` and a three-member `PokemonVariant` union
-- [ ] Commit
+- [x] Commit
 
 ## Phase 2 — NestJS teardown → push to `main`
 

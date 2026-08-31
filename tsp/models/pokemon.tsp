@@ -44,11 +44,15 @@ model PokemonBaseStats {
 }
 
 /**
- * Base Pokemon model. The `classification` property is the discriminator —
- * concrete sub-types narrow it to a string literal.
+ * Shared Pokemon fields, composed into each concrete classification with
+ * spread (`...PokemonBase`). Deliberately **not** a base type to inherit from:
+ * `extends` emits `allOf` in OpenAPI, which the Effect schema generator
+ * collapses to `Schema.Never`. See docs/migration/03-toolchain.md.
+ *
+ * The `classification` discriminator lives on each variant, narrowed to a
+ * string literal.
  */
-@discriminator("classification")
-model Pokemon {
+model PokemonBase {
   /** National Pokedex number (e.g. 1 for Bulbasaur). */
   @minValue(1)
   @maxValue(1025)
@@ -84,13 +88,13 @@ model Pokemon {
 
   /** When this entry was last updated. */
   updatedAt: utcDateTime;
-
-  /** Discriminator property — narrows to a string literal in each sub-type. */
-  classification: string;
 }
 
 /** A regular, catchable Pokemon with no special legendary status. */
-model NormalPokemon extends Pokemon {
+model NormalPokemon {
+  ...PokemonBase;
+
+  /** Discriminator — fixes this variant's classification. */
   classification: "normal";
 
   /** Encounter rate in the wild (0–100). */
@@ -106,7 +110,10 @@ model NormalPokemon extends Pokemon {
  * A Legendary Pokemon — extremely rare, part of a legendary group,
  * cannot be bred.
  */
-model LegendaryPokemon extends Pokemon {
+model LegendaryPokemon {
+  ...PokemonBase;
+
+  /** Discriminator — fixes this variant's classification. */
   classification: "legendary";
 
   /** Name of the legendary group or trio (e.g. "Legendary Birds"). */
@@ -123,7 +130,10 @@ model LegendaryPokemon extends Pokemon {
  * A Mythical Pokemon — event-only distribution, outside the normal story,
  * typically cannot be caught in the wild.
  */
-model MythicalPokemon extends Pokemon {
+model MythicalPokemon {
+  ...PokemonBase;
+
+  /** Discriminator — fixes this variant's classification. */
   classification: "mythical";
 
   /** How this Pokemon is distributed (e.g. "Mystery Gift", "in-game event"). */
@@ -138,8 +148,8 @@ model MythicalPokemon extends Pokemon {
 
 /**
  * Discriminated union of all concrete Pokemon classifications.
- * Used as the return type for Pokedex operations — results in a
- * `oneOf` with `discriminator.mapping` in the generated OpenAPI schema.
+ * Used as the return type for Pokedex operations — emits an `anyOf` of the
+ * three self-contained variant schemas, discriminated on `classification`.
  */
 union PokemonVariant {
   normal: NormalPokemon,
