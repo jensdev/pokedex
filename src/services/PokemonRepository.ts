@@ -69,9 +69,10 @@ export class PokemonRepository extends Context.Service<
 
       return {
         fetchAll: Effect.gen(function* () {
-          // `Random.next`, not `Math.random()`: the repo's own rule is that
-          // nothing non-deterministic is read directly, so a test can pin the
-          // sequence with `Random.withSeed` instead of only the rate.
+          // Through the `Random` service, not the global generator: the repo's
+          // own rule is that nothing non-deterministic is read directly, so a
+          // test can pin the sequence with `Random.withSeed` rather than only
+          // the rate.
           const roll = yield* Random.next;
           if (roll < flakyRate) return yield* new PokemonDataParse();
           return yield* Ref.get(store);

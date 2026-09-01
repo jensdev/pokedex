@@ -60,17 +60,21 @@ src/
     Pokemon.ts              variant construction/replacement rules (total, effect-free)
     Errors.ts               HTTP-agnostic domain errors
   services/               application services — no Effect HTTP imports
-    Health.ts               health/liveness/readiness values
+    Health.ts               liveness, and the health/readiness reports
+    HealthChecks.ts         the component-probe registry + the worst-status rule
     Pokedex.ts              filter, search, sort, paginate; ids and timestamps
     PokemonRepository.ts    storage port + Ref-backed in-memory adapter
     seed.ts                 the four seeded Pokémon
   http/                   the wire boundary
+    ServerApi.ts            the generated api + the schema-error middleware
     HealthHandlers.ts       HttpApiBuilder group for Health
     PokedexHandlers.ts      HttpApiBuilder group for Pokedex, incl. error mapping
     Defects.ts              defect boundary: log the cause, answer a contract 500
     Routes.ts               route composition (API + /openapi.json + /docs + boundary)
+    AppLayer.ts             the composition root: routes over the chosen adapters
   AppConfig.ts            Config values (APP_VERSION, FLAKY_UPSTREAM_RATE)
-  main.ts                 entry point: NodeHttpServer + HttpRouter.serve
+  Observability.ts        OTLP export + the ErrorReporter, both off unless configured
+  main.ts                 entry point: AppLayer + NodeHttpServer + observability
 test/                     @effect/vitest suites
 docs/migration/           the design record of the NestJS → Effect rewrite
 docs/patterns/            the living architecture rules
@@ -86,11 +90,18 @@ node:http
         └─ route match
            ├─ /openapi.json, /docs        the spec and the Scalar reference
            └─ /health*, /pokemon*         HttpApiBuilder
-              ├─ decode params/query/payload against the generated Schema → 400 on violation
+              ├─ SchemaErrorHandler       src/http/ServerApi.ts — per-endpoint middleware
+              │                           schema violation → 400 with the contract ApiError
+              ├─ decode params/query/payload against the generated Schema
               ├─ src/http/*Handlers.ts    wire ⟷ domain, domain error → contract member
               │  └─ src/services/*.ts     the actual logic (spans live here)
               │     └─ PokemonRepository  Ref-backed store
               └─ encode the success body, or the selected error member
+
+Everything above runs under the layers src/main.ts provides at the root:
+src/Observability.ts (OTLP tracer + logger when OTLP_URL is set, and an
+ErrorReporter for failures raised outside any route), and src/http/AppLayer.ts,
+the one place that picks which adapter backs each service.
 ```
 
 ## Conventions
@@ -104,23 +115,38 @@ node:http
 ### Services
 
 `Context.Service` with the interface in the type parameter and the implementation in a static
-`Layer.effect`. Expose a `layerWithX` when a dependency should be injectable in tests, and a
-`layer` that is the application wiring — `Pokedex` does both.
+`Layer.effect`. A service with a port exposes `layerNoDeps` (requiring the port) and may add a
+`layer` that wires an adapter for convenience — `Pokedex` does both. **The application wires
+`layerNoDeps`**: `src/http/AppLayer.ts` is the single place that names an adapter, so every
+consumer shares the same instance instead of quietly getting its own.
 
 ### Errors
 
-Three channels, and the distinction matters:
+Four channels, and the distinction matters:
 
 - **Contract responses** — declared in `tsp/`, so they are typed failures. Domain errors are
   `Schema.TaggedError` in `src/domain/Errors.ts`; the handler maps each to a member of the
-  endpoint's error union.
+  endpoint's error union. A 500 the handler produces is logged with its cause *before* the
+  mapping — `mapError` discards it, and the contract body says nothing on purpose.
 - **Schema violations** — `HttpApiBuilder` reports these by *dying* with a `Respondable`
-  `HttpApiSchemaError` that answers 400 itself. Do not catch them.
-- **Defects** — anything else. `src/http/Defects.ts` logs the cause and answers the contract's
-  `ApiError` 500. Nothing internal reaches the client.
+  `HttpApiSchemaError`, which answers an **empty** 400. `SchemaErrorHandler` in
+  `src/http/ServerApi.ts` catches it first and answers the contract's `ApiError` instead. Do
+  not catch it anywhere else.
+- **Defects** — anything else that reaches a route. `src/http/Defects.ts` logs the cause and
+  answers the contract's `ApiError` 500. Nothing internal reaches the client.
+- **Failures outside a route** — a response that fails to write, a failure in the server
+  chain. The platform hands these to `ErrorReporter`, and the one in `src/Observability.ts`
+  logs them. Without it they vanish.
 
 Do not add an `Effect.die` as a placeholder. If a defect really is the right answer, say in a
 comment why the case is unreachable.
+
+**Which status a failure gets is decided by schema matching, not by the handler.**
+`HttpApiBuilder` encodes the failure against a `Schema.Union` of the endpoint's error members
+in declaration order, first match wins. Members therefore have to be disjoint: `tsp/` pins
+`code` to a literal per status (`CodedApiError<"BAD_REQUEST">`,
+`CodedApiError<"POKEMON_NOT_FOUND">`) and leaves the open `ApiError` on the `default` 500,
+which sorts last. See [docs/patterns/boundaries.md](./docs/patterns/boundaries.md).
 
 ### Observability
 
@@ -128,6 +154,12 @@ Every service method carries a span: `Effect.fn('Service.method')` for methods t
 arguments, `Effect.withSpan` for members that are effect *values*. Annotate the inputs worth
 searching a trace by with `Effect.annotateCurrentSpan` — `Pokedex.list` records its effective
 query, the id-taking methods record the id.
+
+Where any of it *goes* is decided in one place, `src/Observability.ts`, and provided by
+`src/main.ts` below the server layer. Set `OTLP_URL` to a collector base URL and spans go to
+`/v1/traces` and log records to `/v1/logs`; leave it unset and neither is exported and nothing
+else changes. Tests never install an exporter, which is why this is wired in `main.ts` rather
+than in `AppLayer`.
 
 ### Tests
 
@@ -140,10 +172,14 @@ query, the id-taking methods record the id.
   generated-client smoke test.
 
 `it.effect` provides a `TestClock` starting at epoch 0, so timestamps are directly assertable
-and `TestClock.adjust` makes "`updatedAt` moved, `createdAt` did not" observable. Pin
-`FLAKY_UPSTREAM_RATE` to `0` via a `ConfigProvider` layer or list assertions become coin flips.
-`layer()` builds once per suite, so a suite that writes needs either
-`Effect.provide(TestLayer, { local: true })` per test or its own suite block.
+and `TestClock.adjust` makes "`updatedAt` moved, `createdAt` did not" observable.
+`FLAKY_UPSTREAM_RATE` defaults to `0`, so only the suites that want the 500 path pin it (to
+`1`); `Random.withSeed` is how the threshold itself gets exercised. `layer()` builds once per
+suite, so a suite that writes needs either `Effect.provide(TestLayer, { local: true })` per
+test or its own suite block.
+
+Build handler layers from `ServerApi`, not the generated `PokedexApi` — see the gotcha below.
+Suites that need the whole stack should use `AppLayer`, so they run the server's wiring.
 
 ## Gotchas worth knowing
 
@@ -156,4 +192,14 @@ and `TestClock.adjust` makes "`updatedAt` moved, `createdAt` did not" observable
   contextual type the moment you `.pipe(...)` it, and string literals widen. Use `satisfies`
   on the returned object instead — `src/services/Health.ts` does.
 - **No real `Date.now()` or `Math.random()` in domain code.** Read the clock through
-  `DateTime.now` / `Clock`, so tests can control it.
+  `DateTime.now` / `Clock` and randomness through `Random`, so tests can control both.
+  `grep -rn "Date.now()\|Math.random()" src` must print nothing.
+- **HttpApi middleware attaches to the *api*, before handlers are built.**
+  `HttpApiBuilder.group` bakes an endpoint's middleware into its routes at layer-build time,
+  so attaching it at `HttpApiBuilder.layer` instead is a silent no-op — no error, just routes
+  that never run it. `src/http/ServerApi.ts` is the api every handler module builds from.
+- **A middleware's declared error changes the served OpenAPI.**
+  `HttpApiEndpoint.getErrorSchemas` appends it to every endpoint's error union, so
+  `/openapi.json` starts documenting a response `tsp-output/openapi.yaml` does not.
+  `SchemaErrorHandler` answers with a response rather than a declared failure for exactly this
+  reason, and `test/ServerApi.test.ts` is the gate.

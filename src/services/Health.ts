@@ -36,7 +36,7 @@ export class Health extends Context.Service<
       const version = yield* AppVersion;
       const checks = yield* HealthChecks;
       // Process start, as far as the application is concerned. Read through the
-      // Clock so tests can control it; never `Date.now()`.
+      // Clock so tests can control it, never the platform wall clock.
       const startedAtMillis = yield* Clock.currentTimeMillis;
 
       // `satisfies` rather than a type annotation on the `const`: piping into
