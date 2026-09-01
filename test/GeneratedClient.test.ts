@@ -4,7 +4,7 @@
  *
  * This is the only suite that goes over a real socket: the point is to prove
  * the two generated artifacts agree at the wire, so a fake transport would test
- * nothing. `NodeHttpServer.layerTest` serves `AllRoutes` on an ephemeral port
+ * nothing. `NodeHttpServer.layerTest` serves `AppLayer` on an ephemeral port
  * and hands back an `HttpClient` already pointed at it.
  *
  * It stays a *smoke* test on purpose — endpoint semantics are covered by
@@ -22,7 +22,7 @@ import { ConfigProvider, Effect, Layer } from 'effect';
 import { HttpClient, HttpRouter } from 'effect/unstable/http';
 import type { PokedexClient } from '../src/generated/Client.js';
 import { make as makePokedexClient } from '../src/generated/Client.js';
-import { AllRoutes } from '../src/http/Routes.js';
+import { AppLayer } from '../src/http/AppLayer.js';
 
 /** The flaky upstream off, or one list call in ten is a coin flip. */
 const DeterministicConfig = ConfigProvider.layer(
@@ -33,7 +33,7 @@ const DeterministicConfig = ConfigProvider.layer(
  * The real server, on a real port. `disableListenLog`/`disableLogger` only
  * silence the boot and request lines — nothing else about the stack changes.
  */
-const ServerLayer = HttpRouter.serve(AllRoutes, {
+const ServerLayer = HttpRouter.serve(AppLayer, {
   disableLogger: true,
   disableListenLog: true,
 }).pipe(

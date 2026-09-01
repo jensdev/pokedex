@@ -113,7 +113,7 @@ const fixtureRepository = (items: ReadonlyArray<PokemonVariant>) =>
     remove: () => Effect.die('the read side does not write'),
   });
 
-const FixtureLayer = Pokedex.layerWithRepository.pipe(
+const FixtureLayer = Pokedex.layerNoDeps.pipe(
   Layer.provide(fixtureRepository(fixtures)),
 );
 

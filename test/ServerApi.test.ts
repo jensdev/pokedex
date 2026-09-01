@@ -30,10 +30,10 @@ import {
 } from 'effect/unstable/http';
 import { OpenApi } from 'effect/unstable/httpapi';
 import { PokedexApi } from '../src/generated/Api.js';
-import { AllRoutes } from '../src/http/Routes.js';
+import { AppLayer } from '../src/http/AppLayer.js';
 import { ServerApi } from '../src/http/ServerApi.js';
 
-const RoutesLayer = AllRoutes.pipe(
+const RoutesLayer = AppLayer.pipe(
   Layer.provide(
     ConfigProvider.layer(
       ConfigProvider.fromEnvRecord({ FLAKY_UPSTREAM_RATE: '0' }),

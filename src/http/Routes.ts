@@ -9,8 +9,6 @@
  */
 import { Layer } from 'effect';
 import { HttpApiBuilder, HttpApiScalar } from 'effect/unstable/httpapi';
-import { Health } from '../services/Health.js';
-import { Pokedex } from '../services/Pokedex.js';
 import { DefectBoundary } from './Defects.js';
 import { HealthHandlers } from './HealthHandlers.js';
 import { PokedexHandlers } from './PokedexHandlers.js';
@@ -23,14 +21,14 @@ import { SchemaErrorHandlerLayer, ServerApi } from './ServerApi.js';
  *
  * `SchemaErrorHandlerLayer` is provided *to the handler layers*, not next to
  * them: `HttpApiBuilder.group` resolves an endpoint's middleware from its own
- * build-time context.
+ * build-time context. It is wire machinery with no configuration, so unlike
+ * the services it does belong here.
  */
 export const ApiRoutes = HttpApiBuilder.layer(ServerApi, {
   openapiPath: '/openapi.json',
 }).pipe(
   Layer.provide([HealthHandlers, PokedexHandlers]),
   Layer.provide(SchemaErrorHandlerLayer),
-  Layer.provide([Health.layer, Pokedex.layer]),
 );
 
 /** Interactive API docs. */
@@ -39,5 +37,8 @@ export const DocsRoute = HttpApiScalar.layer(ServerApi, { path: '/docs' });
 /**
  * Everything the server serves. {@link DefectBoundary} is global middleware, so
  * merging it in wraps every route registered by the layers next to it.
+ *
+ * Deliberately still *requires* `Health` and `Pokedex`: this module composes
+ * routes, it does not choose implementations. `src/http/AppLayer.ts` does that.
  */
 export const AllRoutes = Layer.mergeAll(ApiRoutes, DocsRoute, DefectBoundary);
