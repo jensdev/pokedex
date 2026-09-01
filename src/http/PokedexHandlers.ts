@@ -4,7 +4,8 @@
  * No domain logic lives here — the handlers translate between the wire
  * contract and {@link Pokedex}, error mapping included:
  *
- * - `PokemonDataParse` → the contract's open `ApiError`, encoded as 500
+ * - `PokemonDataParse` → the contract's open `ApiError`, encoded as 500, with
+ *   the cause logged on the way past — the body says nothing, so the log has to
  * - `PokemonNotFound` → the contract's `POKEMON_NOT_FOUND` body, encoded as 404
  *
  * The `code` literal is what *selects* the status: `HttpApiBuilder` encodes a
@@ -34,6 +35,11 @@ const dataParseError = (): ApiError => ({
 });
 
 /**
+ * The log message the `PokemonDataParse` mapping emits; asserted in the tests.
+ */
+export const DATA_PARSE_LOG_MESSAGE = 'listPokemon failed: upstream data parse';
+
+/**
  * The 404 body of the three id-addressed endpoints. The id is echoed back
  * because the domain error carries it and a client that got a 404 has no other
  * way to tell which of several ids it asked about failed.
@@ -52,7 +58,16 @@ export const PokedexHandlers = HttpApiBuilder.group(
 
     return handlers.handleAll({
       listPokemon: ({ query }) =>
-        pokedex.list(query).pipe(Effect.mapError(dataParseError)),
+        pokedex.list(query).pipe(
+          // A genuine 500. `mapError` throws the cause away on its way to the
+          // contract body, and the body deliberately says nothing useful — so
+          // without this the only 500 the service can raise would leave no
+          // trace at all, while a mere defect gets a full logged cause.
+          Effect.tapCause((cause) =>
+            Effect.logError(DATA_PARSE_LOG_MESSAGE, cause),
+          ),
+          Effect.mapError(dataParseError),
+        ),
 
       getPokemonById: ({ params }) =>
         pokedex
