@@ -96,7 +96,9 @@ Owns filtering/sorting/pagination and the variant construction rules
 
 ```ts
 import { Context, DateTime, Effect, Layer } from "effect"
-import type { ListPokemonQuery, ListPokemon200, PokemonVariant, CreatePokemonRequest } from "../generated/Api.js"
+import type {
+  ListPokemonQuery, ListPokemon200, PokemonVariant, CreatePokemonRequest, UpdatePokemonRequest
+} from "../generated/Api.js"
 import { PokemonNotFound, PokemonDataParse } from "../domain/Errors.js"
 import { makeVariant, replaceVariant } from "../domain/Pokemon.js"
 import { PokemonRepository } from "./PokemonRepository.js"
@@ -105,7 +107,7 @@ export class Pokedex extends Context.Service<Pokedex, {
   readonly list: (query: ListPokemonQuery) => Effect.Effect<ListPokemon200, PokemonDataParse>
   readonly getById: (id: number) => Effect.Effect<PokemonVariant, PokemonNotFound>
   readonly create: (input: CreatePokemonRequest) => Effect.Effect<PokemonVariant>
-  readonly replace: (id: number, input: CreatePokemonRequest) => Effect.Effect<PokemonVariant, PokemonNotFound>
+  readonly replace: (id: number, input: UpdatePokemonRequest) => Effect.Effect<PokemonVariant, PokemonNotFound>
   readonly remove: (id: number) => Effect.Effect<void, PokemonNotFound>
 }>()("pokedex/Pokedex") {
   static readonly layer = Layer.effect(
@@ -292,8 +294,12 @@ layer(TestLayer)("PokedexApi", (it) => {
       })
       assert.strictEqual(created.id, 1026)
 
-      const fetched = yield* client.Pokedex.getPokemonById({ params: { id: created.id } })
-      assert.strictEqual(fetched.name, "missingno")
+      // NOT `getPokemonById({ id: created.id })`: the contract caps that path
+      // parameter at 1025 while generated ids start at 1026, so a created entry
+      // is listable but not addressable by id. See the Phase 6 notes in
+      // 05-phased-checklist.md.
+      const found = yield* client.Pokedex.listPokemon({ query: { search: "missingno" } })
+      assert.strictEqual(found.items[0].name, "missingno")
     }))
 
   it.effect("404s for a missing pokemon", () =>

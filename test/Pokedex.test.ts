@@ -1,8 +1,13 @@
 import { assert, describe, it } from '@effect/vitest';
 import { ConfigProvider, Effect, Layer, Option } from 'effect';
 import type { Config } from 'effect';
+import { TestClock } from 'effect/testing';
 import { PokemonDataParse, PokemonNotFound } from '../src/domain/Errors.js';
-import type { ListPokemonQuery, PokemonVariant } from '../src/generated/Api.js';
+import type {
+  CreatePokemonRequest,
+  ListPokemonQuery,
+  PokemonVariant,
+} from '../src/generated/Api.js';
 import { Pokedex } from '../src/services/Pokedex.js';
 import { PokemonRepository } from '../src/services/PokemonRepository.js';
 
@@ -135,6 +140,47 @@ const withPokedex = <A, E>(
 /** Lists are compared by id — the whole variant would drown the assertion. */
 const idsOf = (items: ReadonlyArray<PokemonVariant>) =>
   items.map((pokemon) => pokemon.id);
+
+/**
+ * The write side needs a real store — {@link fixtureRepository} dies on any
+ * write — so every write test runs against the seeded in-memory adapter, with
+ * a fresh store per test.
+ */
+const writable = <A, E>(program: Effect.Effect<A, E, Pokedex>) =>
+  withPokedex(program, inMemoryWithFlakyRate(0));
+
+/** `TestClock` starts at epoch millis 0, so this is "now" in every test. */
+const EPOCH = '1970-01-01T00:00:00.000Z';
+/** Every seed entry carries this timestamp (parity decision P5). */
+const SEEDED_AT = '2024-01-01T00:00:00.000Z';
+
+/** A create/replace payload: base fields plus a classification, nothing else. */
+const payload = (
+  classification: CreatePokemonRequest['classification'],
+  overrides: Partial<CreatePokemonRequest> = {},
+): CreatePokemonRequest => ({
+  name: 'missingno',
+  primaryType: 'normal',
+  baseStats: stats,
+  heightMetres: 1,
+  weightKg: 1,
+  isObtainable: false,
+  classification,
+  ...overrides,
+});
+
+/** What {@link payload} plus the first generated id and epoch stamps produce. */
+const createdBase = {
+  id: 1026,
+  name: 'missingno',
+  primaryType: 'normal' as const,
+  baseStats: stats,
+  heightMetres: 1,
+  weightKg: 1,
+  isObtainable: false,
+  createdAt: EPOCH,
+  updatedAt: EPOCH,
+};
 
 const listing = (query: ListPokemonQuery) =>
   withPokedex(
@@ -464,6 +510,303 @@ describe('Pokedex.getById', () => {
 
         assert.instanceOf(error, PokemonNotFound);
         assert.strictEqual(error.id, 999);
+      }),
+    ),
+  );
+});
+
+describe('Pokedex.create', () => {
+  it.effect('defaults a normal Pokemon to encounterRate 50', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        const created = yield* pokedex.create(payload('normal'));
+
+        // Deep-equal rather than field probes: it also pins that nothing else
+        // (an `evolvesInto`, a stray `undefined` key) came along.
+        assert.deepStrictEqual(created, {
+          ...createdBase,
+          classification: 'normal',
+          encounterRate: 50,
+        });
+      }),
+    ),
+  );
+
+  it.effect('defaults a legendary Pokemon to an unknown group', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        const created = yield* pokedex.create(payload('legendary'));
+
+        assert.deepStrictEqual(created, {
+          ...createdBase,
+          classification: 'legendary',
+          legendaryGroup: 'Unknown',
+          isBoxLegendary: false,
+        });
+      }),
+    ),
+  );
+
+  it.effect('defaults a mythical Pokemon to the placeholder lore', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        const created = yield* pokedex.create(payload('mythical'));
+
+        assert.deepStrictEqual(created, {
+          ...createdBase,
+          classification: 'mythical',
+          distributionMethod: 'Unknown',
+          isCurrentlyDistributed: false,
+          loreDescription: 'A newly discovered Mythical Pokemon.',
+        });
+      }),
+    ),
+  );
+
+  it.effect('hands out ids from 1026 upwards, one per create', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        const first = yield* pokedex.create(payload('normal'));
+        const second = yield* pokedex.create(payload('legendary'));
+
+        assert.strictEqual(first.id, 1026);
+        assert.strictEqual(second.id, 1027);
+      }),
+    ),
+  );
+
+  it.effect('stamps createdAt and updatedAt from the clock, equal', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        // Move off epoch first: equal-but-hardcoded timestamps would pass the
+        // assertion below at t=0 without ever reading the clock.
+        yield* TestClock.adjust('90 minutes');
+        const created = yield* pokedex.create(payload('normal'));
+
+        assert.strictEqual(created.createdAt, '1970-01-01T01:30:00.000Z');
+        assert.strictEqual(created.updatedAt, created.createdAt);
+      }),
+    ),
+  );
+
+  it.effect('saves the new entry, so a read finds it', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        const created = yield* pokedex.create(payload('normal'));
+        const fetched = yield* pokedex.getById(created.id);
+        const all = yield* pokedex.list({});
+
+        assert.deepStrictEqual(fetched, created);
+        assert.strictEqual(all.total, 5);
+        assert.deepStrictEqual(idsOf(all.items), [1, 25, 150, 151, 1026]);
+      }),
+    ),
+  );
+});
+
+describe('Pokedex.replace', () => {
+  it.effect('preserves id and createdAt and advances updatedAt', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        yield* TestClock.adjust('1 day');
+        const replaced = yield* pokedex.replace(
+          1,
+          payload('normal', { name: 'not-bulbasaur' }),
+        );
+
+        assert.strictEqual(replaced.id, 1);
+        assert.strictEqual(replaced.name, 'not-bulbasaur');
+        assert.strictEqual(replaced.createdAt, SEEDED_AT);
+        assert.strictEqual(replaced.updatedAt, '1970-01-02T00:00:00.000Z');
+      }),
+    ),
+  );
+
+  it.effect(
+    'carries legendary extras when the classification is unchanged',
+    () =>
+      writable(
+        Effect.gen(function* () {
+          const pokedex = yield* Pokedex;
+
+          // Mewtwo is seeded legendary/"Mew Duo"; the payload cannot carry either.
+          const replaced = yield* pokedex.replace(150, payload('legendary'));
+
+          assert.strictEqual(replaced.classification, 'legendary');
+          assert.deepStrictEqual(replaced, {
+            ...createdBase,
+            id: 150,
+            createdAt: SEEDED_AT,
+            classification: 'legendary',
+            legendaryGroup: 'Mew Duo',
+            isBoxLegendary: false,
+          });
+        }),
+      ),
+  );
+
+  it.effect(
+    'carries mythical extras when the classification is unchanged',
+    () =>
+      writable(
+        Effect.gen(function* () {
+          const pokedex = yield* Pokedex;
+
+          const replaced = yield* pokedex.replace(151, payload('mythical'));
+
+          assert.strictEqual(replaced.classification, 'mythical');
+          if (replaced.classification !== 'mythical') return;
+          assert.strictEqual(replaced.distributionMethod, 'Mystery Gift');
+          assert.isFalse(replaced.isCurrentlyDistributed);
+          assert.strictEqual(
+            replaced.loreDescription,
+            'A Mythical Pokemon said to possess the genetic composition of all Pokemon.',
+          );
+        }),
+      ),
+  );
+
+  it.effect('defaults the extras when the classification changes', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        // Legendary → mythical: "Mew Duo" has nowhere to go, so the mythical
+        // fields get the same defaults a create would give them.
+        const replaced = yield* pokedex.replace(150, payload('mythical'));
+
+        assert.deepStrictEqual(replaced, {
+          ...createdBase,
+          id: 150,
+          createdAt: SEEDED_AT,
+          classification: 'mythical',
+          distributionMethod: 'Unknown',
+          isCurrentlyDistributed: false,
+          loreDescription: 'A newly discovered Mythical Pokemon.',
+        });
+      }),
+    ),
+  );
+
+  it.effect('resets encounterRate to 50 on normal → normal (quirk P2)', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        // Bulbasaur is seeded normal with encounterRate 45 and evolvesInto [2].
+        const replaced = yield* pokedex.replace(1, payload('normal'));
+
+        assert.strictEqual(replaced.classification, 'normal');
+        if (replaced.classification !== 'normal') return;
+        // Parity with NestJS: the existing rate is *not* preserved.
+        assert.strictEqual(replaced.encounterRate, 50);
+        // The collection extras are dropped on every replace, likewise parity.
+        assert.isFalse('evolvesInto' in replaced);
+      }),
+    ),
+  );
+
+  it.effect('persists the replacement', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        const replaced = yield* pokedex.replace(
+          25,
+          payload('legendary', { name: 'pikachu-prime' }),
+        );
+        const fetched = yield* pokedex.getById(25);
+        const all = yield* pokedex.list({});
+
+        assert.deepStrictEqual(fetched, replaced);
+        // A replace is not an insert: the entry count is unchanged.
+        assert.strictEqual(all.total, 4);
+      }),
+    ),
+  );
+
+  it.effect('fails with PokemonNotFound on an unknown id', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        const error = yield* Effect.flip(
+          pokedex.replace(999, payload('normal')),
+        );
+
+        assert.instanceOf(error, PokemonNotFound);
+        assert.strictEqual(error.id, 999);
+      }),
+    ),
+  );
+
+  it.effect('does not write anything when the id is unknown', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        yield* Effect.ignore(pokedex.replace(999, payload('normal')));
+        const all = yield* pokedex.list({});
+
+        assert.strictEqual(all.total, 4);
+      }),
+    ),
+  );
+});
+
+describe('Pokedex.remove', () => {
+  it.effect('removes the entry, so a read no longer finds it', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        yield* pokedex.remove(25);
+        const error = yield* Effect.flip(pokedex.getById(25));
+        const all = yield* pokedex.list({});
+
+        assert.instanceOf(error, PokemonNotFound);
+        assert.deepStrictEqual(idsOf(all.items), [1, 150, 151]);
+        assert.strictEqual(all.total, 3);
+      }),
+    ),
+  );
+
+  it.effect('fails with PokemonNotFound on an unknown id', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        const error = yield* Effect.flip(pokedex.remove(999));
+
+        assert.instanceOf(error, PokemonNotFound);
+        assert.strictEqual(error.id, 999);
+      }),
+    ),
+  );
+
+  it.effect('fails on the second remove of the same id', () =>
+    writable(
+      Effect.gen(function* () {
+        const pokedex = yield* Pokedex;
+
+        yield* pokedex.remove(150);
+        const error = yield* Effect.flip(pokedex.remove(150));
+
+        assert.instanceOf(error, PokemonNotFound);
       }),
     ),
   );

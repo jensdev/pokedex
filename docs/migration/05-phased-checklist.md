@@ -183,15 +183,50 @@ Notes from executing this phase:
 - The three write handlers stay `Effect.die` stubs, and the write methods are absent from the
   `Pokedex` interface rather than stubbed on it — Phase 6 adds both together.
 
-## Phase 6 — Pokedex write endpoints
+## Phase 6 — Pokedex write endpoints ✅
 
-- [ ] `Pokedex.create` / `replace` / `remove` + handler wiring for `createPokemon` (201),
+- [x] `Pokedex.create` / `replace` / `remove` + handler wiring for `createPokemon` (201),
       `replacePokemon`, `deletePokemon` (204)
-- [ ] Tests: create defaults per classification; id sequence 1026, 1027…; replace preserves
+- [x] Tests: create defaults per classification; id sequence 1026, 1027…; replace preserves
       `createdAt` + variant extras when classification unchanged (and documents quirk P2);
       replace/delete 404; delete then get → 404
-- [ ] Verify: full `npm run check`; manual smoke via `/docs`
-- [ ] Commit
+- [x] Verify: full `npm run check`; manual smoke via `/docs`
+- [x] Commit
+
+Notes from executing this phase:
+
+- **The contract capped `PokemonBase.id` at 1025, which made every create a 500.** Parity
+  decision P4 starts the generated id sequence at 1026, deliberately above the National
+  Pokédex range — but `@maxValue(1025)` on the id applies to the *response* variants too, so
+  encoding the 201 body failed with `Expected a value less than or equal to 1025 at ["id"]`.
+  NestJS never validated its responses, so the conflict only surfaced here. Fixed in
+  `tsp/models/pokemon.tsp` by dropping the `@maxValue` from `PokemonBase.id` (the `@minValue(1)`
+  stays) and regenerating; the only schema change is the removed check on the three variants.
+- **`GET /pokemon/{id}` still caps `id` at 1025, so a created entry is listable but not
+  addressable by id.** That path-parameter cap is unchanged from the NestJS contract and is
+  documented in the behavior spec, so it is kept as parity — but it means the round trip in
+  [04-implementation-patterns.md](04-implementation-patterns.md#6-testing--testpokedexapitestts)
+  (create, then `getPokemonById({ id: created.id })`) cannot work as written. The doc snippet
+  has been corrected to fetch through `listPokemon`. Worth putting to stakeholders in Phase 7.
+- **`PokemonBaseStats` carries no `@minValue`.** The behavior spec's §createPokemon claimed
+  contract validation rejects negative stats with a 400 before the value-object guards could
+  throw; it does not — `hp: -1` is a valid request and gets stored. The spec has been
+  corrected and `test/PokedexApi.test.ts` pins the current behavior; adding the bounds is a
+  Phase 7 item.
+- **`remove` uses the repository's boolean return, not a find-then-delete pair.**
+  `repository.remove` already reports whether the id was there, which is the same
+  `PokemonNotFound`-or-succeed semantics in one call.
+- **Write tests build their layer per test.** `layer()` from `@effect/vitest` builds its
+  layer once per suite (a cached `contextEffect`), so every test in a suite shares one `Ref`
+  store — fine while nothing writes, order-dependent the moment something does. The client
+  tests wrap each program in `Effect.provide(TestLayer, { local: true })`; the route tests get
+  it for free because `HttpRouter.toHttpEffect` calls `Layer.build` per invocation.
+- `@effect/vitest`'s `it.effect` provides a `TestClock` that starts at epoch millis 0, so
+  `DateTime.now` yields `1970-01-01T00:00:00.000Z` and timestamps are directly assertable;
+  `TestClock.adjust` makes "updatedAt advanced, createdAt did not" observable.
+- Importing `it` from `@effect/vitest` at module scope collides with the `it` that
+  `layer(...)((it) => …)` hands each suite — oxlint's `eslint(no-shadow)` is a hard error, so
+  the write suites are `layer(HttpServer.layerServices)(name, (it) => …)` blocks too.
 
 ## Phase 7 — Hardening & DX
 

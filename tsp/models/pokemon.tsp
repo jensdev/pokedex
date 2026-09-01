@@ -53,9 +53,11 @@ model PokemonBaseStats {
  * string literal.
  */
 model PokemonBase {
-  /** National Pokedex number (e.g. 1 for Bulbasaur). */
+  // Deliberately uncapped: created entries get ids from 1026 upwards, above
+  // the National Pokedex range (parity decision P4). The `GET /pokemon/{id}`
+  // path parameter keeps its 1-1025 cap. See docs/migration/01-current-behavior-spec.md.
+  /** National Pokedex number (e.g. 1 for Bulbasaur), or a generated id. */
   @minValue(1)
-  @maxValue(1025)
   id: int32;
 
   /** Species name in lowercase (e.g. "bulbasaur"). */
