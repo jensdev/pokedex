@@ -111,6 +111,7 @@ const fixtureRepository = (items: ReadonlyArray<PokemonVariant>) =>
     nextId: Effect.die('the read side does not allocate ids'),
     save: () => Effect.die('the read side does not write'),
     remove: () => Effect.die('the read side does not write'),
+    health: Effect.die('the read side does not probe'),
   });
 
 const FixtureLayer = Pokedex.layerNoDeps.pipe(

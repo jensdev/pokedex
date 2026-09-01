@@ -13,9 +13,13 @@ export const AppVersion = Config.string('APP_VERSION').pipe(
 
 /**
  * Probability (0–1) that the repository's simulated upstream returns corrupt
- * data — parity decision P1 in the behavior spec. Unused until Phase 4; tests
- * set it to `0` for determinism.
+ * data — parity decision P1 in the behavior spec.
+ *
+ * Defaults to `0`: the chaos is opt-in. The NestJS implementation shipped a
+ * hardcoded 10%, and carrying that over as the *default* meant one production
+ * `GET /pokemon` in ten answered a 500 for no reason. Set it to something
+ * non-zero to exercise the failure path on purpose.
  */
 export const FlakyUpstreamRate = Config.finite('FLAKY_UPSTREAM_RATE').pipe(
-  Config.withDefault(0.1),
+  Config.withDefault(0),
 );

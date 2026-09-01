@@ -10,10 +10,10 @@
  * once the store is something slower than a `Ref`. The methods that take an id
  * annotate it; `fetchAll` and `nextId` have no arguments worth recording.
  */
-import { Context, Effect, Layer, Option, Ref } from 'effect';
+import { Clock, Context, Effect, Layer, Option, Random, Ref } from 'effect';
 import { FlakyUpstreamRate } from '../AppConfig.js';
 import { PokemonDataParse } from '../domain/Errors.js';
-import type { PokemonVariant } from '../generated/Api.js';
+import type { HealthResponse, PokemonVariant } from '../generated/Api.js';
 import { seedPokemon } from './seed.js';
 
 /**
@@ -23,12 +23,21 @@ import { seedPokemon } from './seed.js';
  */
 export const FIRST_GENERATED_ID = 1026;
 
+/**
+ * The contract's per-component health shape. Derived rather than imported: the
+ * generator inlines `ComponentHealth` into `HealthResponse` instead of emitting
+ * a name for it, and deriving it here keeps `services/HealthChecks.ts` — which
+ * depends on this module — out of this module's imports.
+ */
+type ComponentHealth = HealthResponse['components']['database'];
+
 export class PokemonRepository extends Context.Service<
   PokemonRepository,
   {
     /**
      * The full data set. Simulates the flaky upstream of parity decision P1:
-     * fails with {@link PokemonDataParse} at `FLAKY_UPSTREAM_RATE`.
+     * fails with {@link PokemonDataParse} at `FLAKY_UPSTREAM_RATE`, which
+     * defaults to `0` — the chaos is opt-in.
      */
     readonly fetchAll: Effect.Effect<
       ReadonlyArray<PokemonVariant>,
@@ -37,6 +46,12 @@ export class PokemonRepository extends Context.Service<
     readonly findById: (
       id: number,
     ) => Effect.Effect<Option.Option<PokemonVariant>>;
+    /**
+     * Probes the store for the health endpoints — the adapter knows what a
+     * round trip to *its* storage costs; `services/HealthChecks.ts` only knows
+     * which contract component to file the answer under.
+     */
+    readonly health: Effect.Effect<ComponentHealth>;
     /** The next id in the sequence; consumed by the call. */
     readonly nextId: Effect.Effect<number>;
     /** Inserts, or replaces the entry with the same id. */
@@ -54,7 +69,10 @@ export class PokemonRepository extends Context.Service<
 
       return {
         fetchAll: Effect.gen(function* () {
-          const roll = yield* Effect.sync(() => Math.random());
+          // `Random.next`, not `Math.random()`: the repo's own rule is that
+          // nothing non-deterministic is read directly, so a test can pin the
+          // sequence with `Random.withSeed` instead of only the rate.
+          const roll = yield* Random.next;
           if (roll < flakyRate) return yield* new PokemonDataParse();
           return yield* Ref.get(store);
         }).pipe(Effect.withSpan('PokemonRepository.fetchAll')),
@@ -70,6 +88,21 @@ export class PokemonRepository extends Context.Service<
         nextId: Ref.getAndUpdate(idSequence, (n) => n + 1).pipe(
           Effect.withSpan('PokemonRepository.nextId'),
         ),
+
+        health: Effect.gen(function* () {
+          const startedAt = yield* Clock.currentTimeMillis;
+          const all = yield* Ref.get(store);
+          const latencyMs = (yield* Clock.currentTimeMillis) - startedAt;
+
+          // A `Ref.get` cannot fail, so this adapter has no unhealthy branch to
+          // report — the shape is what matters: a store that can lose its
+          // connection reports one from here, and the aggregate picks it up.
+          return {
+            status: 'healthy',
+            message: `${all.length} entries`,
+            latencyMs,
+          } satisfies ComponentHealth;
+        }).pipe(Effect.withSpan('PokemonRepository.health')),
 
         save: Effect.fn('PokemonRepository.save')(function* (
           pokemon: PokemonVariant,

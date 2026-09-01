@@ -15,6 +15,7 @@
  */
 import { Layer } from 'effect';
 import { Health } from '../services/Health.js';
+import { HealthChecks } from '../services/HealthChecks.js';
 import { Pokedex } from '../services/Pokedex.js';
 import { PokemonRepository } from '../services/PokemonRepository.js';
 import { AllRoutes } from './Routes.js';
@@ -22,5 +23,9 @@ import { AllRoutes } from './Routes.js';
 /** Everything the server serves, with every service resolved. */
 export const AppLayer = AllRoutes.pipe(
   Layer.provide([Health.layer, Pokedex.layerNoDeps]),
+  // Both of these read the repository, and both get the same one — which is
+  // the point: a health check against a *different* store than the one serving
+  // requests would report on nothing.
+  Layer.provide(HealthChecks.layer),
   Layer.provide(PokemonRepository.layerInMemory),
 );
