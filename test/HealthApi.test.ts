@@ -7,15 +7,21 @@ import {
   HttpServerRequest,
 } from 'effect/unstable/http';
 import { HttpApiTest } from 'effect/unstable/httpapi';
-import { PokedexApi } from '../src/generated/Api.js';
 import { HealthHandlers } from '../src/http/HealthHandlers.js';
 import { AllRoutes } from '../src/http/Routes.js';
+import { SchemaErrorHandlerLayer, ServerApi } from '../src/http/ServerApi.js';
 import { Health } from '../src/services/Health.js';
 
-const makeClient = HttpApiTest.groups(PokedexApi, ['Health']);
+// `ServerApi`, not the generated `PokedexApi`: the handlers are built against
+// the api that carries the schema-error middleware, and the typed client has to
+// describe the same endpoints.
+const makeClient = HttpApiTest.groups(ServerApi, ['Health']);
 
 const TestLayer = Layer.mergeAll(
-  HealthHandlers.pipe(Layer.provide(Health.layer)),
+  HealthHandlers.pipe(
+    Layer.provideMerge(SchemaErrorHandlerLayer),
+    Layer.provide(Health.layer),
+  ),
   HttpServer.layerServices,
 );
 
