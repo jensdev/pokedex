@@ -10,6 +10,11 @@
  * It stays a *smoke* test on purpose — endpoint semantics are covered by
  * `PokedexApi.test.ts` in-memory. What is checked here is that each operation
  * reaches its route, decodes its success body, and surfaces its declared error.
+ *
+ * The `{}` on operations that take no input is not decoration: the generated
+ * signature makes the options parameter *required* (typed `{…} | undefined`), so
+ * omitting it is a type error. `{}` says "no options" without tripping
+ * `unicorn(no-useless-undefined)`.
  */
 import { NodeHttpServer } from '@effect/platform-node';
 import { assert, layer } from '@effect/vitest';
@@ -46,7 +51,7 @@ layer(ServerLayer)('Generated client', (it) => {
     Effect.gen(function* () {
       const pokedex = yield* client;
 
-      const body = yield* pokedex.healthCheck(undefined);
+      const body = yield* pokedex.healthCheck({});
 
       assert.strictEqual(body.status, 'healthy');
       assert.strictEqual(body.version, '1.0.0');
@@ -58,7 +63,7 @@ layer(ServerLayer)('Generated client', (it) => {
     Effect.gen(function* () {
       const pokedex = yield* client;
 
-      const body = yield* pokedex.healthLiveness(undefined);
+      const body = yield* pokedex.healthLiveness({});
 
       assert.strictEqual(body.status, 'ok');
       assert.isTrue(Number.isFinite(body.uptime));
@@ -85,7 +90,7 @@ layer(ServerLayer)('Generated client', (it) => {
     Effect.gen(function* () {
       const pokedex = yield* client;
 
-      const mewtwo = yield* pokedex.getPokemonById('150', undefined);
+      const mewtwo = yield* pokedex.getPokemonById('150', {});
 
       // The discriminant narrows the union, so `legendaryGroup` is reachable
       // without a cast — which is the whole point of the generated client.
@@ -99,9 +104,7 @@ layer(ServerLayer)('Generated client', (it) => {
     Effect.gen(function* () {
       const pokedex = yield* client;
 
-      const error = yield* Effect.flip(
-        pokedex.getPokemonById('999', undefined),
-      );
+      const error = yield* Effect.flip(pokedex.getPokemonById('999', {}));
 
       assert.strictEqual(error._tag, '404');
     }),
@@ -152,7 +155,7 @@ layer(ServerLayer)('Generated client — writes', (it) => {
 
       // Puts the store back: this suite shares one server across its tests,
       // unlike the in-memory suites.
-      yield* pokedex.deletePokemon(String(created.id), undefined);
+      yield* pokedex.deletePokemon(String(created.id), {});
     }),
   );
 
@@ -186,9 +189,9 @@ layer(ServerLayer)('Generated client — writes', (it) => {
       if (replaced.classification !== 'legendary') return;
       assert.strictEqual(replaced.legendaryGroup, 'Unknown');
 
-      yield* pokedex.deletePokemon('1', undefined);
+      yield* pokedex.deletePokemon('1', {});
 
-      const gone = yield* Effect.flip(pokedex.getPokemonById('1', undefined));
+      const gone = yield* Effect.flip(pokedex.getPokemonById('1', {}));
       assert.strictEqual(gone._tag, '404');
     }),
   );
