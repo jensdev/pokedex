@@ -44,6 +44,16 @@ const TestLayer = handlersWith(DeterministicConfig);
 const idsOf = (items: ReadonlyArray<PokemonVariant>) =>
   items.map((pokemon) => pokemon.id);
 
+/**
+ * The contract's 404 body (decision D1). The `code` literal is not decoration:
+ * it is what selects the 404 member of the endpoint's error union over the
+ * structurally identical 400 and 500 members.
+ */
+const notFoundBody = (id: number) => ({
+  code: 'POKEMON_NOT_FOUND',
+  message: `No Pokemon with id ${id}`,
+});
+
 /** A create/replace payload: base fields plus a classification, nothing else. */
 const payload = (
   classification: CreatePokemonRequest['classification'],
@@ -186,8 +196,7 @@ layer(TestLayer)('Pokedex API', (it) => {
         client.Pokedex.getPokemonById({ params: { id: 999 } }),
       );
 
-      // The Empty(404) member of the error union decodes to void.
-      assert.isUndefined(error);
+      assert.deepStrictEqual(error, notFoundBody(999));
     }),
   );
 });
@@ -270,8 +279,7 @@ layer(HttpServer.layerServices)('Pokedex API — writes', (it) => {
           }),
         );
 
-        // The Empty(404) member of the error union decodes to void.
-        assert.isUndefined(error);
+        assert.deepStrictEqual(error, notFoundBody(999));
       }),
     ),
   );
@@ -287,7 +295,7 @@ layer(HttpServer.layerServices)('Pokedex API — writes', (it) => {
         );
         const all = yield* client.Pokedex.listPokemon({ query: {} });
 
-        assert.isUndefined(error);
+        assert.deepStrictEqual(error, notFoundBody(25));
         assert.deepStrictEqual(idsOf(all.items), [1, 150, 151]);
       }),
     ),
@@ -302,7 +310,7 @@ layer(HttpServer.layerServices)('Pokedex API — writes', (it) => {
           client.Pokedex.deletePokemon({ params: { id: 999 } }),
         );
 
-        assert.isUndefined(error);
+        assert.deepStrictEqual(error, notFoundBody(999));
       }),
     ),
   );
@@ -424,20 +432,30 @@ layer(HttpServer.layerServices)('Pokedex routes', (it) => {
     }),
   );
 
-  it.effect('GET /pokemon/999 responds 404 with an empty body', () =>
+  it.effect('GET /pokemon/999 responds 404 with the contract ApiError', () =>
     Effect.gen(function* () {
       const response = yield* get('/pokemon/999');
 
       assert.strictEqual(response.status, 404);
       const body = yield* HttpServerResponse.toClientResponse(response).text;
-      assert.strictEqual(body, '');
+      assert.deepStrictEqual(parseJson(body), notFoundBody(999));
     }),
   );
 
-  it.effect('GET /pokemon/2000 is rejected as 400 before the handler', () =>
+  it.effect('GET /pokemon/2000 reaches the handler and 404s', () =>
     Effect.gen(function* () {
-      // The contract caps `id` at 1025, so `getPokemonById` never runs.
+      // `PokemonId` dropped the 1025 cap (decision D2), so an id above the
+      // National Pokedex range is a lookup, not a validation failure.
       const response = yield* get('/pokemon/2000');
+
+      assert.strictEqual(response.status, 404);
+    }),
+  );
+
+  it.effect('GET /pokemon/0 is rejected as 400 before the handler', () =>
+    Effect.gen(function* () {
+      // `PokemonId` still starts at 1.
+      const response = yield* get('/pokemon/0');
 
       assert.strictEqual(response.status, 400);
     }),
@@ -472,7 +490,7 @@ layer(HttpServer.layerServices)('Pokedex routes', (it) => {
     }),
   );
 
-  it.effect('a created entry is listable, but not addressable by id', () =>
+  it.effect('a created entry is listable and addressable by id', () =>
     Effect.gen(function* () {
       const send = yield* sessionVia(routes);
 
@@ -482,10 +500,11 @@ layer(HttpServer.layerServices)('Pokedex routes', (it) => {
 
       assert.strictEqual(listed.status, 200);
       assert.include(yield* bodyOf(listed), '"id":1026');
-      // Parity quirk: `GET /pokemon/{id}` caps `id` at 1025 (behavior spec
-      // §getPokemonById), while created ids start at 1026 — so the entry is
-      // rejected by validation before the handler ever looks it up.
-      assert.strictEqual(fetched.status, 400);
+      // Decision D2: dropping `@maxValue(1025)` from the path parameter is what
+      // makes a created entry (ids from 1026) reachable at all. Before the
+      // hardening pass this answered 400.
+      assert.strictEqual(fetched.status, 200);
+      assert.include(yield* bodyOf(fetched), '"id":1026');
     }),
   );
 
@@ -512,7 +531,7 @@ layer(HttpServer.layerServices)('Pokedex routes', (it) => {
     }),
   );
 
-  it.effect('PUT /pokemon/999 responds 404 with an empty body', () =>
+  it.effect('PUT /pokemon/999 responds 404 with the contract ApiError', () =>
     Effect.gen(function* () {
       const send = yield* sessionVia(routes);
 
@@ -523,7 +542,10 @@ layer(HttpServer.layerServices)('Pokedex routes', (it) => {
       );
 
       assert.strictEqual(response.status, 404);
-      assert.strictEqual(yield* bodyOf(response), '');
+      assert.deepStrictEqual(
+        parseJson(yield* bodyOf(response)),
+        notFoundBody(999),
+      );
     }),
   );
 
@@ -547,6 +569,31 @@ layer(HttpServer.layerServices)('Pokedex routes', (it) => {
       const response = yield* send(HttpClientRequest.delete('/pokemon/999'));
 
       assert.strictEqual(response.status, 404);
+      assert.deepStrictEqual(
+        parseJson(yield* bodyOf(response)),
+        notFoundBody(999),
+      );
+    }),
+  );
+
+  /**
+   * Finding 3: `@minValue(1)` used to sit on `getById` alone, so `PUT` and
+   * `DELETE /pokemon/0` reached the handler and answered 404. All three share
+   * the `PokemonId` scalar now, so all three reject it.
+   */
+  it.effect('PUT and DELETE /pokemon/0 are rejected as 400', () =>
+    Effect.gen(function* () {
+      const send = yield* sessionVia(routes);
+
+      const replaced = yield* send(
+        HttpClientRequest.put('/pokemon/0').pipe(
+          HttpClientRequest.bodyJsonUnsafe(payload('normal')),
+        ),
+      );
+      const deleted = yield* send(HttpClientRequest.delete('/pokemon/0'));
+
+      assert.strictEqual(replaced.status, 400);
+      assert.strictEqual(deleted.status, 400);
     }),
   );
 

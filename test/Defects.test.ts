@@ -176,8 +176,8 @@ layer(HttpServer.layerServices)('Defect boundary — AllRoutes', (it) => {
     Effect.gen(function* () {
       const { value: response, entries } = yield* withCapturedLogs(
         Effect.flatMap(sendVia(RoutesWithBoom), (send) =>
-          // `id` is capped at 1025 by the contract's path parameter.
-          send(HttpClientRequest.get('/pokemon/2000')),
+          // `PokemonId` starts at 1, so `0` violates the path parameter.
+          send(HttpClientRequest.get('/pokemon/0')),
         ),
       );
 

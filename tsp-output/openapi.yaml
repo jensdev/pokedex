@@ -26,6 +26,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/HealthResponse'
+        '400':
+          description: The request violates the contract.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - BAD_REQUEST
+                    description: Machine-readable error code.
+                  message:
+                    type: string
+                    description: Human-readable error message.
+                  details:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Optional additional context about the error.
+                description: |-
+                  `ApiError` with `code` pinned to the one value a given status uses.
+
+                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
+                  `Schema.Union` of the endpoint's error members **in declaration order, first
+                  match wins**. Three structurally identical `ApiError` members (400, 404, and
+                  the `default` 500) would make every typed failure encode as the first one —
+                  400 — whatever the handler meant. Pinning `code` per status makes the members
+                  disjoint, so the value selects its own status, and the generated literal type
+                  makes a handler that picks the wrong one a compile error.
+
+                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
+                  is the catch-all it reads as, and internal failures do not share one code.
         default:
           description: An unexpected error response.
           content:
@@ -49,6 +85,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/LivenessResponse'
+        '400':
+          description: The request violates the contract.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - BAD_REQUEST
+                    description: Machine-readable error code.
+                  message:
+                    type: string
+                    description: Human-readable error message.
+                  details:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Optional additional context about the error.
+                description: |-
+                  `ApiError` with `code` pinned to the one value a given status uses.
+
+                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
+                  `Schema.Union` of the endpoint's error members **in declaration order, first
+                  match wins**. Three structurally identical `ApiError` members (400, 404, and
+                  the `default` 500) would make every typed failure encode as the first one —
+                  400 — whatever the handler meant. Pinning `code` per status makes the members
+                  disjoint, so the value selects its own status, and the generated literal type
+                  makes a handler that picks the wrong one a compile error.
+
+                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
+                  is the catch-all it reads as, and internal failures do not share one code.
         default:
           description: An unexpected error response.
           content:
@@ -63,12 +135,54 @@ paths:
       summary: Readiness probe
       description: |-
         Kubernetes readiness probe.
-        Returns 200 only when the service is ready to accept traffic
-        (i.e. the database connection is available).
+        Returns 200 only when the service is ready to accept traffic, and 503
+        with the same body when the aggregate component status is `unhealthy`.
       parameters: []
       responses:
         '200':
           description: The request has succeeded.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        '400':
+          description: The request violates the contract.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - BAD_REQUEST
+                    description: Machine-readable error code.
+                  message:
+                    type: string
+                    description: Human-readable error message.
+                  details:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Optional additional context about the error.
+                description: |-
+                  `ApiError` with `code` pinned to the one value a given status uses.
+
+                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
+                  `Schema.Union` of the endpoint's error members **in declaration order, first
+                  match wins**. Three structurally identical `ApiError` members (400, 404, and
+                  the `default` 500) would make every typed failure encode as the first one —
+                  400 — whatever the handler meant. Pinning `code` per status makes the members
+                  disjoint, so the value selects its own status, and the generated literal type
+                  makes a handler that picks the wrong one a compile error.
+
+                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
+                  is the catch-all it reads as, and internal failures do not share one code.
+        '503':
+          description: The service is not ready to accept traffic.
           content:
             application/json:
               schema:
@@ -125,6 +239,42 @@ paths:
                     format: int32
                     description: Number of items per page.
                 description: Paginated list wrapper used for collection endpoints.
+        '400':
+          description: The request violates the contract.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - BAD_REQUEST
+                    description: Machine-readable error code.
+                  message:
+                    type: string
+                    description: Human-readable error message.
+                  details:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Optional additional context about the error.
+                description: |-
+                  `ApiError` with `code` pinned to the one value a given status uses.
+
+                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
+                  `Schema.Union` of the endpoint's error members **in declaration order, first
+                  match wins**. Three structurally identical `ApiError` members (400, 404, and
+                  the `default` 500) would make every typed failure encode as the first one —
+                  400 — whatever the handler meant. Pinning `code` per status makes the members
+                  disjoint, so the value selects its own status, and the generated literal type
+                  makes a handler that picks the wrong one a compile error.
+
+                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
+                  is the catch-all it reads as, and internal failures do not share one code.
         default:
           description: An unexpected error response.
           content:
@@ -145,6 +295,42 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PokemonVariant'
+        '400':
+          description: The request violates the contract.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - BAD_REQUEST
+                    description: Machine-readable error code.
+                  message:
+                    type: string
+                    description: Human-readable error message.
+                  details:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Optional additional context about the error.
+                description: |-
+                  `ApiError` with `code` pinned to the one value a given status uses.
+
+                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
+                  `Schema.Union` of the endpoint's error members **in declaration order, first
+                  match wins**. Three structurally identical `ApiError` members (400, 404, and
+                  the `default` 500) would make every typed failure encode as the first one —
+                  400 — whatever the handler meant. Pinning `code` per status makes the members
+                  disjoint, so the value selects its own status, and the generated literal type
+                  makes a handler that picks the wrong one a compile error.
+
+                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
+                  is the catch-all it reads as, and internal failures do not share one code.
         default:
           description: An unexpected error response.
           content:
@@ -172,12 +358,9 @@ paths:
         - name: id
           in: path
           required: true
-          description: National Pokedex number.
+          description: National Pokedex number, or a generated id.
           schema:
-            type: integer
-            format: int32
-            minimum: 1
-            maximum: 1025
+            $ref: '#/components/schemas/PokemonId'
       responses:
         '200':
           description: The request has succeeded.
@@ -185,8 +368,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PokemonVariant'
+        '400':
+          description: The request violates the contract.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - BAD_REQUEST
+                    description: Machine-readable error code.
+                  message:
+                    type: string
+                    description: Human-readable error message.
+                  details:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Optional additional context about the error.
+                description: |-
+                  `ApiError` with `code` pinned to the one value a given status uses.
+
+                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
+                  `Schema.Union` of the endpoint's error members **in declaration order, first
+                  match wins**. Three structurally identical `ApiError` members (400, 404, and
+                  the `default` 500) would make every typed failure encode as the first one —
+                  400 — whatever the handler meant. Pinning `code` per status makes the members
+                  disjoint, so the value selects its own status, and the generated literal type
+                  makes a handler that picks the wrong one a compile error.
+
+                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
+                  is the catch-all it reads as, and internal failures do not share one code.
         '404':
-          description: The server cannot find the requested resource.
+          description: No Pokemon with this id exists.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - POKEMON_NOT_FOUND
+                    description: Machine-readable error code.
+                  message:
+                    type: string
+                    description: Human-readable error message.
+                  details:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Optional additional context about the error.
+                description: |-
+                  `ApiError` with `code` pinned to the one value a given status uses.
+
+                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
+                  `Schema.Union` of the endpoint's error members **in declaration order, first
+                  match wins**. Three structurally identical `ApiError` members (400, 404, and
+                  the `default` 500) would make every typed failure encode as the first one —
+                  400 — whatever the handler meant. Pinning `code` per status makes the members
+                  disjoint, so the value selects its own status, and the generated literal type
+                  makes a handler that picks the wrong one a compile error.
+
+                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
+                  is the catch-all it reads as, and internal failures do not share one code.
         default:
           description: An unexpected error response.
           content:
@@ -204,8 +457,7 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
-            format: int32
+            $ref: '#/components/schemas/PokemonId'
       responses:
         '200':
           description: The request has succeeded.
@@ -213,8 +465,78 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/PokemonVariant'
+        '400':
+          description: The request violates the contract.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - BAD_REQUEST
+                    description: Machine-readable error code.
+                  message:
+                    type: string
+                    description: Human-readable error message.
+                  details:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Optional additional context about the error.
+                description: |-
+                  `ApiError` with `code` pinned to the one value a given status uses.
+
+                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
+                  `Schema.Union` of the endpoint's error members **in declaration order, first
+                  match wins**. Three structurally identical `ApiError` members (400, 404, and
+                  the `default` 500) would make every typed failure encode as the first one —
+                  400 — whatever the handler meant. Pinning `code` per status makes the members
+                  disjoint, so the value selects its own status, and the generated literal type
+                  makes a handler that picks the wrong one a compile error.
+
+                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
+                  is the catch-all it reads as, and internal failures do not share one code.
         '404':
-          description: The server cannot find the requested resource.
+          description: No Pokemon with this id exists.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - POKEMON_NOT_FOUND
+                    description: Machine-readable error code.
+                  message:
+                    type: string
+                    description: Human-readable error message.
+                  details:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Optional additional context about the error.
+                description: |-
+                  `ApiError` with `code` pinned to the one value a given status uses.
+
+                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
+                  `Schema.Union` of the endpoint's error members **in declaration order, first
+                  match wins**. Three structurally identical `ApiError` members (400, 404, and
+                  the `default` 500) would make every typed failure encode as the first one —
+                  400 — whatever the handler meant. Pinning `code` per status makes the members
+                  disjoint, so the value selects its own status, and the generated literal type
+                  makes a handler that picks the wrong one a compile error.
+
+                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
+                  is the catch-all it reads as, and internal failures do not share one code.
         default:
           description: An unexpected error response.
           content:
@@ -238,13 +560,82 @@ paths:
           in: path
           required: true
           schema:
-            type: integer
-            format: int32
+            $ref: '#/components/schemas/PokemonId'
       responses:
         '204':
           description: There is no content to send for this request, but the headers may be useful.
+        '400':
+          description: The request violates the contract.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - BAD_REQUEST
+                    description: Machine-readable error code.
+                  message:
+                    type: string
+                    description: Human-readable error message.
+                  details:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Optional additional context about the error.
+                description: |-
+                  `ApiError` with `code` pinned to the one value a given status uses.
+
+                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
+                  `Schema.Union` of the endpoint's error members **in declaration order, first
+                  match wins**. Three structurally identical `ApiError` members (400, 404, and
+                  the `default` 500) would make every typed failure encode as the first one —
+                  400 — whatever the handler meant. Pinning `code` per status makes the members
+                  disjoint, so the value selects its own status, and the generated literal type
+                  makes a handler that picks the wrong one a compile error.
+
+                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
+                  is the catch-all it reads as, and internal failures do not share one code.
         '404':
-          description: The server cannot find the requested resource.
+          description: No Pokemon with this id exists.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - code
+                  - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                      - POKEMON_NOT_FOUND
+                    description: Machine-readable error code.
+                  message:
+                    type: string
+                    description: Human-readable error message.
+                  details:
+                    type: object
+                    additionalProperties:
+                      type: string
+                    description: Optional additional context about the error.
+                description: |-
+                  `ApiError` with `code` pinned to the one value a given status uses.
+
+                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
+                  `Schema.Union` of the endpoint's error members **in declaration order, first
+                  match wins**. Three structurally identical `ApiError` members (400, 404, and
+                  the `default` 500) would make every typed failure encode as the first one —
+                  400 — whatever the handler meant. Pinning `code` per status makes the members
+                  disjoint, so the value selects its own status, and the generated literal type
+                  makes a handler that picks the wrong one a compile error.
+
+                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
+                  is the catch-all it reads as, and internal failures do not share one code.
         default:
           description: An unexpected error response.
           content:
@@ -714,6 +1105,16 @@ components:
         - legendary
         - mythical
       description: Pokemon classification used when creating or filtering Pokemon.
+    PokemonId:
+      type: integer
+      format: int32
+      minimum: 1
+      description: |-
+        A National Pokédex number, or a generated id.
+
+        Deliberately uncapped (decision D2 in the hardening plan): entries created
+        through `POST /pokemon` get ids from `FIRST_GENERATED_ID = 1026` upwards, so
+        a `@maxValue(1025)` on the path parameter would make them unaddressable.
     PokemonType:
       type: string
       enum:
