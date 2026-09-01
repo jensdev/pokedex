@@ -1,11 +1,29 @@
 # HttpApi hardening plan
 
-**Status:** proposed — not yet implemented.
+**Status:** implemented on `feat/httpapi-hardening`, one commit per phase.
 **Date:** 2026-09-01
 **Scope:** the ten findings from the Effect 4.0 best-practices review of the HttpApi
 implementation. Verified against the installed `effect@4.0.0-rc.112` source and by
 probing the running router (`HttpRouter.toWebHandler`), not from memory — per rule 2
 in `AGENTS.md`.
+
+## What the plan did not foresee
+
+Two things, both settled against the pinned rc.112 and both recorded in
+[docs/patterns/boundaries.md](../patterns/boundaries.md):
+
+1. **D1 traded one greedy match for another.** Removing `HttpApiSchema.Empty(404)`
+   left three structurally identical `ApiError` members (400, 404, `default` 500)
+   in each error union, and `HttpApiBuilder` encodes a failure against them in
+   declaration order, first match wins — so every typed failure encoded as 400
+   (probed). `tsp/models/common.tsp` pins `code` to a literal per status, which
+   makes the members disjoint and the choice a compile-time one.
+2. **A middleware's declared error changes the served OpenAPI.**
+   `HttpApiEndpoint.getErrorSchemas` appends it to every endpoint's error union,
+   so the `{ error: ValidationError }` of Phase B made `/openapi.json` document
+   each 400 as an `anyOf` including the error's `_tag` — the drift Phase B itself
+   forbids. The middleware answers with a response instead, which
+   `layerSchemaErrorTransform` is typed for. `test/ServerApi.test.ts` is the gate.
 
 ## Background: the findings
 
