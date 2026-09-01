@@ -42,7 +42,7 @@ interface PokedexController {
   list(
     ...PaginationParams,
     ...ListPokemonParams,
-  ): OkResponse & Body<PaginatedList<PokemonVariant>> | ApiError;
+  ): OkResponse & Body<PaginatedList<PokemonVariant>> | BadRequestApiError | ApiError;
 
   /**
    * Get a single Pokemon by its national Pokedex number.
@@ -56,11 +56,9 @@ interface PokedexController {
   @operationId("getPokemonById")
   getById(
     @path
-    @doc("National Pokedex number.")
-    @minValue(1)
-    @maxValue(1025)
-    id: int32,
-  ): OkResponse & Body<PokemonVariant> | NotFoundResponse | ApiError;
+    @doc("National Pokedex number, or a generated id.")
+    id: PokemonId,
+  ): OkResponse & Body<PokemonVariant> | BadRequestApiError | NotFoundApiError | ApiError;
 
   /**
    * Add a new Pokemon entry to the Pokedex.
@@ -70,7 +68,7 @@ interface PokedexController {
   @operationId("createPokemon")
   create(
     @body body: CreatePokemonRequest,
-  ): CreatedResponse & Body<PokemonVariant> | ApiError;
+  ): CreatedResponse & Body<PokemonVariant> | BadRequestApiError | ApiError;
 
   /**
    * Fully replace an existing Pokemon entry.
@@ -80,9 +78,9 @@ interface PokedexController {
   @summary("Replace Pokemon")
   @operationId("replacePokemon")
   replace(
-    @path id: int32,
+    @path id: PokemonId,
     @body body: UpdatePokemonRequest,
-  ): OkResponse & Body<PokemonVariant> | NotFoundResponse | ApiError;
+  ): OkResponse & Body<PokemonVariant> | BadRequestApiError | NotFoundApiError | ApiError;
 
   /**
    * Remove a Pokemon entry from the Pokedex.
@@ -92,6 +90,6 @@ interface PokedexController {
   @summary("Delete Pokemon")
   @operationId("deletePokemon")
   remove(
-    @path id: int32,
-  ): NoContentResponse | NotFoundResponse | ApiError;
+    @path id: PokemonId,
+  ): NoContentResponse | BadRequestApiError | NotFoundApiError | ApiError;
 }

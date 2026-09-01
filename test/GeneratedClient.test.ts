@@ -106,7 +106,13 @@ layer(ServerLayer)('Generated client', (it) => {
 
       const error = yield* Effect.flip(pokedex.getPokemonById('999', {}));
 
-      assert.strictEqual(error._tag, '404');
+      // The 404 carries an `ApiError` body now (decision D1), so the client
+      // decodes it into `cause` instead of throwing the status away.
+      assert.strictEqual(error._tag, 'GetPokemonById404');
+      assert.deepStrictEqual(error.cause, {
+        code: 'POKEMON_NOT_FOUND',
+        message: 'No Pokemon with id 999',
+      });
     }),
   );
 });
@@ -192,7 +198,7 @@ layer(ServerLayer)('Generated client — writes', (it) => {
       yield* pokedex.deletePokemon('1', {});
 
       const gone = yield* Effect.flip(pokedex.getPokemonById('1', {}));
-      assert.strictEqual(gone._tag, '404');
+      assert.strictEqual(gone._tag, 'GetPokemonById404');
     }),
   );
 });

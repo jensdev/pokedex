@@ -939,6 +939,19 @@ export const CreatePokemonRequest = Schema.Struct({
   description: 'Payload for creating a new Pokemon entry.',
   identifier: 'CreatePokemonRequest',
 });
+export type PokemonId = number;
+export const PokemonId = Schema.Number.annotate({
+  description:
+    'A National Pokédex number, or a generated id.\n\nDeliberately uncapped (decision D2 in the hardening plan): entries created\nthrough `POST /pokemon` get ids from `FIRST_GENERATED_ID = 1026` upwards, so\na `@maxValue(1025)` on the path parameter would make them unaddressable.',
+  format: 'int32',
+})
+  .check(Schema.isInt().annotate({ expected: 'an integer' }))
+  .check(
+    Schema.isGreaterThanOrEqualTo(1).annotate({
+      expected: 'a value greater than or equal to 1',
+      identifier: 'PokemonId',
+    }),
+  );
 export type UpdatePokemonRequest = {
   readonly name: string;
   readonly primaryType:
@@ -1092,14 +1105,79 @@ export const UpdatePokemonRequest = Schema.Struct({
 // schemas
 export type HealthCheck200 = HealthResponse;
 export const HealthCheck200 = HealthResponse;
+export type HealthCheck400 = {
+  readonly code: 'BAD_REQUEST';
+  readonly message: string;
+  readonly details?: { readonly [x: string]: string };
+};
+export const HealthCheck400 = Schema.Struct({
+  code: Schema.Literal('BAD_REQUEST').annotate({
+    description: 'Machine-readable error code.',
+  }),
+  message: Schema.String.annotate({
+    description: 'Human-readable error message.',
+  }),
+  details: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String).annotate({
+      description: 'Optional additional context about the error.',
+    }),
+  ),
+}).annotate({
+  description:
+    "`ApiError` with `code` pinned to the one value a given status uses.\n\nNot cosmetic. `HttpApiBuilder` encodes a handler's failure against a\n`Schema.Union` of the endpoint's error members **in declaration order, first\nmatch wins**. Three structurally identical `ApiError` members (400, 404, and\nthe `default` 500) would make every typed failure encode as the first one —\n400 — whatever the handler meant. Pinning `code` per status makes the members\ndisjoint, so the value selects its own status, and the generated literal type\nmakes a handler that picks the wrong one a compile error.\n\nThe `default` 500 keeps the open `ApiError`: it is last in the union, so it\nis the catch-all it reads as, and internal failures do not share one code.",
+});
 export type HealthCheckdefault = ApiError;
 export const HealthCheckdefault = ApiError;
 export type HealthLiveness200 = LivenessResponse;
 export const HealthLiveness200 = LivenessResponse;
+export type HealthLiveness400 = {
+  readonly code: 'BAD_REQUEST';
+  readonly message: string;
+  readonly details?: { readonly [x: string]: string };
+};
+export const HealthLiveness400 = Schema.Struct({
+  code: Schema.Literal('BAD_REQUEST').annotate({
+    description: 'Machine-readable error code.',
+  }),
+  message: Schema.String.annotate({
+    description: 'Human-readable error message.',
+  }),
+  details: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String).annotate({
+      description: 'Optional additional context about the error.',
+    }),
+  ),
+}).annotate({
+  description:
+    "`ApiError` with `code` pinned to the one value a given status uses.\n\nNot cosmetic. `HttpApiBuilder` encodes a handler's failure against a\n`Schema.Union` of the endpoint's error members **in declaration order, first\nmatch wins**. Three structurally identical `ApiError` members (400, 404, and\nthe `default` 500) would make every typed failure encode as the first one —\n400 — whatever the handler meant. Pinning `code` per status makes the members\ndisjoint, so the value selects its own status, and the generated literal type\nmakes a handler that picks the wrong one a compile error.\n\nThe `default` 500 keeps the open `ApiError`: it is last in the union, so it\nis the catch-all it reads as, and internal failures do not share one code.",
+});
 export type HealthLivenessdefault = ApiError;
 export const HealthLivenessdefault = ApiError;
 export type HealthReadiness200 = HealthResponse;
 export const HealthReadiness200 = HealthResponse;
+export type HealthReadiness400 = {
+  readonly code: 'BAD_REQUEST';
+  readonly message: string;
+  readonly details?: { readonly [x: string]: string };
+};
+export const HealthReadiness400 = Schema.Struct({
+  code: Schema.Literal('BAD_REQUEST').annotate({
+    description: 'Machine-readable error code.',
+  }),
+  message: Schema.String.annotate({
+    description: 'Human-readable error message.',
+  }),
+  details: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String).annotate({
+      description: 'Optional additional context about the error.',
+    }),
+  ),
+}).annotate({
+  description:
+    "`ApiError` with `code` pinned to the one value a given status uses.\n\nNot cosmetic. `HttpApiBuilder` encodes a handler's failure against a\n`Schema.Union` of the endpoint's error members **in declaration order, first\nmatch wins**. Three structurally identical `ApiError` members (400, 404, and\nthe `default` 500) would make every typed failure encode as the first one —\n400 — whatever the handler meant. Pinning `code` per status makes the members\ndisjoint, so the value selects its own status, and the generated literal type\nmakes a handler that picks the wrong one a compile error.\n\nThe `default` 500 keeps the open `ApiError`: it is last in the union, so it\nis the catch-all it reads as, and internal failures do not share one code.",
+});
+export type HealthReadiness503 = HealthResponse;
+export const HealthReadiness503 = HealthResponse;
 export type HealthReadinessdefault = ApiError;
 export const HealthReadinessdefault = ApiError;
 export type ListPokemonParams = {
@@ -1217,50 +1295,197 @@ export const ListPokemon200 = Schema.Struct({
 }).annotate({
   description: 'Paginated list wrapper used for collection endpoints.',
 });
+export type ListPokemon400 = {
+  readonly code: 'BAD_REQUEST';
+  readonly message: string;
+  readonly details?: { readonly [x: string]: string };
+};
+export const ListPokemon400 = Schema.Struct({
+  code: Schema.Literal('BAD_REQUEST').annotate({
+    description: 'Machine-readable error code.',
+  }),
+  message: Schema.String.annotate({
+    description: 'Human-readable error message.',
+  }),
+  details: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String).annotate({
+      description: 'Optional additional context about the error.',
+    }),
+  ),
+}).annotate({
+  description:
+    "`ApiError` with `code` pinned to the one value a given status uses.\n\nNot cosmetic. `HttpApiBuilder` encodes a handler's failure against a\n`Schema.Union` of the endpoint's error members **in declaration order, first\nmatch wins**. Three structurally identical `ApiError` members (400, 404, and\nthe `default` 500) would make every typed failure encode as the first one —\n400 — whatever the handler meant. Pinning `code` per status makes the members\ndisjoint, so the value selects its own status, and the generated literal type\nmakes a handler that picks the wrong one a compile error.\n\nThe `default` 500 keeps the open `ApiError`: it is last in the union, so it\nis the catch-all it reads as, and internal failures do not share one code.",
+});
 export type ListPokemondefault = ApiError;
 export const ListPokemondefault = ApiError;
 export type CreatePokemonRequestJson = CreatePokemonRequest;
 export const CreatePokemonRequestJson = CreatePokemonRequest;
 export type CreatePokemon201 = PokemonVariant;
 export const CreatePokemon201 = PokemonVariant;
+export type CreatePokemon400 = {
+  readonly code: 'BAD_REQUEST';
+  readonly message: string;
+  readonly details?: { readonly [x: string]: string };
+};
+export const CreatePokemon400 = Schema.Struct({
+  code: Schema.Literal('BAD_REQUEST').annotate({
+    description: 'Machine-readable error code.',
+  }),
+  message: Schema.String.annotate({
+    description: 'Human-readable error message.',
+  }),
+  details: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String).annotate({
+      description: 'Optional additional context about the error.',
+    }),
+  ),
+}).annotate({
+  description:
+    "`ApiError` with `code` pinned to the one value a given status uses.\n\nNot cosmetic. `HttpApiBuilder` encodes a handler's failure against a\n`Schema.Union` of the endpoint's error members **in declaration order, first\nmatch wins**. Three structurally identical `ApiError` members (400, 404, and\nthe `default` 500) would make every typed failure encode as the first one —\n400 — whatever the handler meant. Pinning `code` per status makes the members\ndisjoint, so the value selects its own status, and the generated literal type\nmakes a handler that picks the wrong one a compile error.\n\nThe `default` 500 keeps the open `ApiError`: it is last in the union, so it\nis the catch-all it reads as, and internal failures do not share one code.",
+});
 export type CreatePokemondefault = ApiError;
 export const CreatePokemondefault = ApiError;
-export type GetPokemonByIdPathParams = { readonly id: number };
-export const GetPokemonByIdPathParams = Schema.Struct({
-  id: Schema.Number.annotate({ format: 'int32' })
-    .check(Schema.isInt().annotate({ expected: 'an integer' }))
-    .check(
-      Schema.isGreaterThanOrEqualTo(1).annotate({
-        expected: 'a value greater than or equal to 1',
-      }),
-    )
-    .check(
-      Schema.isLessThanOrEqualTo(1025).annotate({
-        expected: 'a value less than or equal to 1025',
-      }),
-    ),
-});
+export type GetPokemonByIdPathParams = { readonly id: PokemonId };
+export const GetPokemonByIdPathParams = Schema.Struct({ id: PokemonId });
 export type GetPokemonById200 = PokemonVariant;
 export const GetPokemonById200 = PokemonVariant;
+export type GetPokemonById400 = {
+  readonly code: 'BAD_REQUEST';
+  readonly message: string;
+  readonly details?: { readonly [x: string]: string };
+};
+export const GetPokemonById400 = Schema.Struct({
+  code: Schema.Literal('BAD_REQUEST').annotate({
+    description: 'Machine-readable error code.',
+  }),
+  message: Schema.String.annotate({
+    description: 'Human-readable error message.',
+  }),
+  details: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String).annotate({
+      description: 'Optional additional context about the error.',
+    }),
+  ),
+}).annotate({
+  description:
+    "`ApiError` with `code` pinned to the one value a given status uses.\n\nNot cosmetic. `HttpApiBuilder` encodes a handler's failure against a\n`Schema.Union` of the endpoint's error members **in declaration order, first\nmatch wins**. Three structurally identical `ApiError` members (400, 404, and\nthe `default` 500) would make every typed failure encode as the first one —\n400 — whatever the handler meant. Pinning `code` per status makes the members\ndisjoint, so the value selects its own status, and the generated literal type\nmakes a handler that picks the wrong one a compile error.\n\nThe `default` 500 keeps the open `ApiError`: it is last in the union, so it\nis the catch-all it reads as, and internal failures do not share one code.",
+});
+export type GetPokemonById404 = {
+  readonly code: 'POKEMON_NOT_FOUND';
+  readonly message: string;
+  readonly details?: { readonly [x: string]: string };
+};
+export const GetPokemonById404 = Schema.Struct({
+  code: Schema.Literal('POKEMON_NOT_FOUND').annotate({
+    description: 'Machine-readable error code.',
+  }),
+  message: Schema.String.annotate({
+    description: 'Human-readable error message.',
+  }),
+  details: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String).annotate({
+      description: 'Optional additional context about the error.',
+    }),
+  ),
+}).annotate({
+  description:
+    "`ApiError` with `code` pinned to the one value a given status uses.\n\nNot cosmetic. `HttpApiBuilder` encodes a handler's failure against a\n`Schema.Union` of the endpoint's error members **in declaration order, first\nmatch wins**. Three structurally identical `ApiError` members (400, 404, and\nthe `default` 500) would make every typed failure encode as the first one —\n400 — whatever the handler meant. Pinning `code` per status makes the members\ndisjoint, so the value selects its own status, and the generated literal type\nmakes a handler that picks the wrong one a compile error.\n\nThe `default` 500 keeps the open `ApiError`: it is last in the union, so it\nis the catch-all it reads as, and internal failures do not share one code.",
+});
 export type GetPokemonByIddefault = ApiError;
 export const GetPokemonByIddefault = ApiError;
-export type ReplacePokemonPathParams = { readonly id: number };
-export const ReplacePokemonPathParams = Schema.Struct({
-  id: Schema.Number.annotate({ format: 'int32' }).check(
-    Schema.isInt().annotate({ expected: 'an integer' }),
-  ),
-});
+export type ReplacePokemonPathParams = { readonly id: PokemonId };
+export const ReplacePokemonPathParams = Schema.Struct({ id: PokemonId });
 export type ReplacePokemonRequestJson = UpdatePokemonRequest;
 export const ReplacePokemonRequestJson = UpdatePokemonRequest;
 export type ReplacePokemon200 = PokemonVariant;
 export const ReplacePokemon200 = PokemonVariant;
+export type ReplacePokemon400 = {
+  readonly code: 'BAD_REQUEST';
+  readonly message: string;
+  readonly details?: { readonly [x: string]: string };
+};
+export const ReplacePokemon400 = Schema.Struct({
+  code: Schema.Literal('BAD_REQUEST').annotate({
+    description: 'Machine-readable error code.',
+  }),
+  message: Schema.String.annotate({
+    description: 'Human-readable error message.',
+  }),
+  details: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String).annotate({
+      description: 'Optional additional context about the error.',
+    }),
+  ),
+}).annotate({
+  description:
+    "`ApiError` with `code` pinned to the one value a given status uses.\n\nNot cosmetic. `HttpApiBuilder` encodes a handler's failure against a\n`Schema.Union` of the endpoint's error members **in declaration order, first\nmatch wins**. Three structurally identical `ApiError` members (400, 404, and\nthe `default` 500) would make every typed failure encode as the first one —\n400 — whatever the handler meant. Pinning `code` per status makes the members\ndisjoint, so the value selects its own status, and the generated literal type\nmakes a handler that picks the wrong one a compile error.\n\nThe `default` 500 keeps the open `ApiError`: it is last in the union, so it\nis the catch-all it reads as, and internal failures do not share one code.",
+});
+export type ReplacePokemon404 = {
+  readonly code: 'POKEMON_NOT_FOUND';
+  readonly message: string;
+  readonly details?: { readonly [x: string]: string };
+};
+export const ReplacePokemon404 = Schema.Struct({
+  code: Schema.Literal('POKEMON_NOT_FOUND').annotate({
+    description: 'Machine-readable error code.',
+  }),
+  message: Schema.String.annotate({
+    description: 'Human-readable error message.',
+  }),
+  details: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String).annotate({
+      description: 'Optional additional context about the error.',
+    }),
+  ),
+}).annotate({
+  description:
+    "`ApiError` with `code` pinned to the one value a given status uses.\n\nNot cosmetic. `HttpApiBuilder` encodes a handler's failure against a\n`Schema.Union` of the endpoint's error members **in declaration order, first\nmatch wins**. Three structurally identical `ApiError` members (400, 404, and\nthe `default` 500) would make every typed failure encode as the first one —\n400 — whatever the handler meant. Pinning `code` per status makes the members\ndisjoint, so the value selects its own status, and the generated literal type\nmakes a handler that picks the wrong one a compile error.\n\nThe `default` 500 keeps the open `ApiError`: it is last in the union, so it\nis the catch-all it reads as, and internal failures do not share one code.",
+});
 export type ReplacePokemondefault = ApiError;
 export const ReplacePokemondefault = ApiError;
-export type DeletePokemonPathParams = { readonly id: number };
-export const DeletePokemonPathParams = Schema.Struct({
-  id: Schema.Number.annotate({ format: 'int32' }).check(
-    Schema.isInt().annotate({ expected: 'an integer' }),
+export type DeletePokemonPathParams = { readonly id: PokemonId };
+export const DeletePokemonPathParams = Schema.Struct({ id: PokemonId });
+export type DeletePokemon400 = {
+  readonly code: 'BAD_REQUEST';
+  readonly message: string;
+  readonly details?: { readonly [x: string]: string };
+};
+export const DeletePokemon400 = Schema.Struct({
+  code: Schema.Literal('BAD_REQUEST').annotate({
+    description: 'Machine-readable error code.',
+  }),
+  message: Schema.String.annotate({
+    description: 'Human-readable error message.',
+  }),
+  details: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String).annotate({
+      description: 'Optional additional context about the error.',
+    }),
   ),
+}).annotate({
+  description:
+    "`ApiError` with `code` pinned to the one value a given status uses.\n\nNot cosmetic. `HttpApiBuilder` encodes a handler's failure against a\n`Schema.Union` of the endpoint's error members **in declaration order, first\nmatch wins**. Three structurally identical `ApiError` members (400, 404, and\nthe `default` 500) would make every typed failure encode as the first one —\n400 — whatever the handler meant. Pinning `code` per status makes the members\ndisjoint, so the value selects its own status, and the generated literal type\nmakes a handler that picks the wrong one a compile error.\n\nThe `default` 500 keeps the open `ApiError`: it is last in the union, so it\nis the catch-all it reads as, and internal failures do not share one code.",
+});
+export type DeletePokemon404 = {
+  readonly code: 'POKEMON_NOT_FOUND';
+  readonly message: string;
+  readonly details?: { readonly [x: string]: string };
+};
+export const DeletePokemon404 = Schema.Struct({
+  code: Schema.Literal('POKEMON_NOT_FOUND').annotate({
+    description: 'Machine-readable error code.',
+  }),
+  message: Schema.String.annotate({
+    description: 'Human-readable error message.',
+  }),
+  details: Schema.optionalKey(
+    Schema.Record(Schema.String, Schema.String).annotate({
+      description: 'Optional additional context about the error.',
+    }),
+  ),
+}).annotate({
+  description:
+    "`ApiError` with `code` pinned to the one value a given status uses.\n\nNot cosmetic. `HttpApiBuilder` encodes a handler's failure against a\n`Schema.Union` of the endpoint's error members **in declaration order, first\nmatch wins**. Three structurally identical `ApiError` members (400, 404, and\nthe `default` 500) would make every typed failure encode as the first one —\n400 — whatever the handler meant. Pinning `code` per status makes the members\ndisjoint, so the value selects its own status, and the generated literal type\nmakes a handler that picks the wrong one a compile error.\n\nThe `default` 500 keeps the open `ApiError`: it is last in the union, so it\nis the catch-all it reads as, and internal failures do not share one code.",
 });
 export type DeletePokemondefault = ApiError;
 export const DeletePokemondefault = ApiError;
@@ -1268,7 +1493,7 @@ export const DeletePokemondefault = ApiError;
 class HealthGroup extends HttpApiGroup.make('Health').add(
   HttpApiEndpoint.get('healthCheck', '/health', {
     success: HealthCheck200,
-    error: HealthCheckdefault,
+    error: [HealthCheck400.pipe(HttpApiSchema.status(400)), HealthCheckdefault],
   })
     .annotate(OpenApi.Identifier, 'healthCheck')
     .annotate(OpenApi.Summary, 'Full health check')
@@ -1278,7 +1503,10 @@ class HealthGroup extends HttpApiGroup.make('Health').add(
     ),
   HttpApiEndpoint.get('healthLiveness', '/health/live', {
     success: HealthLiveness200,
-    error: HealthLivenessdefault,
+    error: [
+      HealthLiveness400.pipe(HttpApiSchema.status(400)),
+      HealthLivenessdefault,
+    ],
   })
     .annotate(OpenApi.Identifier, 'healthLiveness')
     .annotate(OpenApi.Summary, 'Liveness probe')
@@ -1288,13 +1516,17 @@ class HealthGroup extends HttpApiGroup.make('Health').add(
     ),
   HttpApiEndpoint.get('healthReadiness', '/health/ready', {
     success: HealthReadiness200,
-    error: HealthReadinessdefault,
+    error: [
+      HealthReadiness400.pipe(HttpApiSchema.status(400)),
+      HealthReadiness503.pipe(HttpApiSchema.status(503)),
+      HealthReadinessdefault,
+    ],
   })
     .annotate(OpenApi.Identifier, 'healthReadiness')
     .annotate(OpenApi.Summary, 'Readiness probe')
     .annotate(
       OpenApi.Description,
-      'Kubernetes readiness probe.\nReturns 200 only when the service is ready to accept traffic\n(i.e. the database connection is available).',
+      'Kubernetes readiness probe.\nReturns 200 only when the service is ready to accept traffic, and 503\nwith the same body when the aggregate component status is `unhealthy`.',
     ),
 ) {}
 
@@ -1302,7 +1534,7 @@ class PokedexGroup extends HttpApiGroup.make('Pokedex').add(
   HttpApiEndpoint.get('listPokemon', '/pokemon', {
     query: ListPokemonQuery,
     success: ListPokemon200,
-    error: ListPokemondefault,
+    error: [ListPokemon400.pipe(HttpApiSchema.status(400)), ListPokemondefault],
   })
     .annotate(OpenApi.Identifier, 'listPokemon')
     .annotate(OpenApi.Summary, 'List Pokemon')
@@ -1313,7 +1545,10 @@ class PokedexGroup extends HttpApiGroup.make('Pokedex').add(
   HttpApiEndpoint.post('createPokemon', '/pokemon', {
     payload: CreatePokemonRequestJson,
     success: CreatePokemon201.pipe(HttpApiSchema.status(201)),
-    error: CreatePokemondefault,
+    error: [
+      CreatePokemon400.pipe(HttpApiSchema.status(400)),
+      CreatePokemondefault,
+    ],
   })
     .annotate(OpenApi.Identifier, 'createPokemon')
     .annotate(OpenApi.Summary, 'Create Pokemon')
@@ -1321,7 +1556,11 @@ class PokedexGroup extends HttpApiGroup.make('Pokedex').add(
   HttpApiEndpoint.get('getPokemonById', '/pokemon/:id', {
     params: GetPokemonByIdPathParams,
     success: GetPokemonById200,
-    error: [HttpApiSchema.Empty(404), GetPokemonByIddefault],
+    error: [
+      GetPokemonById400.pipe(HttpApiSchema.status(400)),
+      GetPokemonById404.pipe(HttpApiSchema.status(404)),
+      GetPokemonByIddefault,
+    ],
   })
     .annotate(OpenApi.Identifier, 'getPokemonById')
     .annotate(OpenApi.Summary, 'Get Pokemon by ID')
@@ -1333,7 +1572,11 @@ class PokedexGroup extends HttpApiGroup.make('Pokedex').add(
     params: ReplacePokemonPathParams,
     payload: ReplacePokemonRequestJson,
     success: ReplacePokemon200,
-    error: [HttpApiSchema.Empty(404), ReplacePokemondefault],
+    error: [
+      ReplacePokemon400.pipe(HttpApiSchema.status(400)),
+      ReplacePokemon404.pipe(HttpApiSchema.status(404)),
+      ReplacePokemondefault,
+    ],
   })
     .annotate(OpenApi.Identifier, 'replacePokemon')
     .annotate(OpenApi.Summary, 'Replace Pokemon')
@@ -1341,7 +1584,11 @@ class PokedexGroup extends HttpApiGroup.make('Pokedex').add(
   HttpApiEndpoint.delete('deletePokemon', '/pokemon/:id', {
     params: DeletePokemonPathParams,
     success: HttpApiSchema.Empty(204),
-    error: [HttpApiSchema.Empty(404), DeletePokemondefault],
+    error: [
+      DeletePokemon400.pipe(HttpApiSchema.status(400)),
+      DeletePokemon404.pipe(HttpApiSchema.status(404)),
+      DeletePokemondefault,
+    ],
   })
     .annotate(OpenApi.Identifier, 'deletePokemon')
     .annotate(OpenApi.Summary, 'Delete Pokemon')
