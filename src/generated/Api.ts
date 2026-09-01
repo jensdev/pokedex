@@ -359,18 +359,14 @@ export type PokemonVariant =
 export const PokemonVariant = Schema.Union([
   Schema.Struct({
     id: Schema.Number.annotate({
-      description: 'National Pokedex number (e.g. 1 for Bulbasaur).',
+      description:
+        'National Pokedex number (e.g. 1 for Bulbasaur), or a generated id.',
       format: 'int32',
     })
       .check(Schema.isInt().annotate({ expected: 'an integer' }))
       .check(
         Schema.isGreaterThanOrEqualTo(1).annotate({
           expected: 'a value greater than or equal to 1',
-        }),
-      )
-      .check(
-        Schema.isLessThanOrEqualTo(1025).annotate({
-          expected: 'a value less than or equal to 1025',
         }),
       ),
     name: Schema.String.annotate({
@@ -514,18 +510,14 @@ export const PokemonVariant = Schema.Union([
   }),
   Schema.Struct({
     id: Schema.Number.annotate({
-      description: 'National Pokedex number (e.g. 1 for Bulbasaur).',
+      description:
+        'National Pokedex number (e.g. 1 for Bulbasaur), or a generated id.',
       format: 'int32',
     })
       .check(Schema.isInt().annotate({ expected: 'an integer' }))
       .check(
         Schema.isGreaterThanOrEqualTo(1).annotate({
           expected: 'a value greater than or equal to 1',
-        }),
-      )
-      .check(
-        Schema.isLessThanOrEqualTo(1025).annotate({
-          expected: 'a value less than or equal to 1025',
         }),
       ),
     name: Schema.String.annotate({
@@ -658,18 +650,14 @@ export const PokemonVariant = Schema.Union([
   }),
   Schema.Struct({
     id: Schema.Number.annotate({
-      description: 'National Pokedex number (e.g. 1 for Bulbasaur).',
+      description:
+        'National Pokedex number (e.g. 1 for Bulbasaur), or a generated id.',
       format: 'int32',
     })
       .check(Schema.isInt().annotate({ expected: 'an integer' }))
       .check(
         Schema.isGreaterThanOrEqualTo(1).annotate({
           expected: 'a value greater than or equal to 1',
-        }),
-      )
-      .check(
-        Schema.isLessThanOrEqualTo(1025).annotate({
-          expected: 'a value less than or equal to 1025',
         }),
       ),
     name: Schema.String.annotate({

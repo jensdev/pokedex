@@ -49,7 +49,15 @@ Processing order (each step feeds the next):
     `loreDescription: "A newly discovered Mythical Pokemon."`
 - Returns **201** with the full variant.
 - Value-object guards (negative stats, non-positive height/weight) throw uncaught exceptions
-  → 500. In practice unreachable: Zod/contract validation (min 0) rejects first with 400.
+  → 500. Contract validation catches *some* of these first: `heightMetres` and `weightKg`
+  carry `@minValue(0)`, so a negative one is a 400. **`PokemonBaseStats` carries no bounds**,
+  so `hp: -1` is a valid request — under NestJS it reached the guard and 500'd; the Effect
+  implementation has no guards and stores it. Adding the stat bounds to the contract is a
+  Phase 7 item.
+- Generated ids start at 1026 (P4), while `GET /pokemon/{id}` caps `id` at 1025 — so a
+  created entry appears in `GET /pokemon` but is a 400 on `GET /pokemon/{its id}`. The
+  response model's own `@maxValue(1025)` on `id` was dropped in Phase 6 (it made the 201
+  body unencodable); the path-parameter cap is kept as parity.
 
 ### `PUT /pokemon/{id}` — replacePokemon
 

@@ -1,20 +1,26 @@
 /**
- * Read side of the Pokédex.
+ * The Pokédex application service.
  *
  * Owns everything the storage port deliberately does not: filtering, the name
- * search, sorting, and pagination. The steps and their order come from
- * `docs/migration/01-current-behavior-spec.md` §listPokemon and are applied
- * here in exactly that order.
+ * search, sorting, and pagination on the read side; id allocation, timestamps,
+ * and the not-found checks on the write side. The steps and their order come
+ * from `docs/migration/01-current-behavior-spec.md` and are applied here in
+ * exactly that order.
  *
- * Writes (`create`/`replace`/`remove`) land in Phase 6.
+ * The variant construction rules themselves live in `domain/Pokemon.ts`: this
+ * module supplies the id and the timestamps and calls `makeVariant` /
+ * `replaceVariant`, so the defaulting rules exist in exactly one place.
  */
-import { Context, Effect, Layer, Option } from 'effect';
+import { Context, DateTime, Effect, Layer, Option } from 'effect';
 import { PokemonNotFound } from '../domain/Errors.js';
 import type { PokemonDataParse } from '../domain/Errors.js';
+import { makeVariant, replaceVariant } from '../domain/Pokemon.js';
 import type {
+  CreatePokemonRequest,
   ListPokemon200,
   ListPokemonQuery,
   PokemonVariant,
+  UpdatePokemonRequest,
 } from '../generated/Api.js';
 import { PokemonRepository } from './PokemonRepository.js';
 
@@ -101,6 +107,24 @@ export class Pokedex extends Context.Service<
     readonly getById: (
       id: number,
     ) => Effect.Effect<PokemonVariant, PokemonNotFound>;
+    /**
+     * Stores a new entry and returns it. Total: the payload has already been
+     * validated against the contract before it reaches the service, and the
+     * id and timestamps are generated here, so there is nothing left to reject.
+     */
+    readonly create: (
+      input: CreatePokemonRequest,
+    ) => Effect.Effect<PokemonVariant>;
+    /**
+     * Fully replaces the entry with this id, returning the stored result.
+     * Fails with {@link PokemonNotFound} when no entry has this id.
+     */
+    readonly replace: (
+      id: number,
+      input: UpdatePokemonRequest,
+    ) => Effect.Effect<PokemonVariant, PokemonNotFound>;
+    /** Fails with {@link PokemonNotFound} when no entry has this id. */
+    readonly remove: (id: number) => Effect.Effect<void, PokemonNotFound>;
   }
 >()('pokedex/Pokedex') {
   /**
@@ -141,7 +165,52 @@ export class Pokedex extends Context.Service<
         return found.value;
       });
 
-      return { list, getById };
+      /**
+       * The wall clock as an ISO 8601 string. `DateTime.now` reads the `Clock`
+       * service rather than `Date.now`, which is what makes the timestamps
+       * observable under `TestClock`.
+       */
+      const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
+
+      const create = Effect.fn('Pokedex.create')(function* (
+        input: CreatePokemonRequest,
+      ) {
+        const id = yield* repository.nextId;
+        // One read of the clock: `createdAt` and `updatedAt` must be equal on
+        // a create (behavior spec §createPokemon).
+        const now = yield* nowIso;
+
+        const pokemon = makeVariant(input, {
+          id,
+          createdAt: now,
+          updatedAt: now,
+        });
+        yield* repository.save(pokemon);
+        return pokemon;
+      });
+
+      const replace = Effect.fn('Pokedex.replace')(function* (
+        id: number,
+        input: UpdatePokemonRequest,
+      ) {
+        const existing = yield* repository.findById(id);
+        if (Option.isNone(existing)) return yield* new PokemonNotFound({ id });
+
+        // `replaceVariant` keeps the existing id and `createdAt`, so only the
+        // new `updatedAt` is supplied here.
+        const pokemon = replaceVariant(existing.value, input, yield* nowIso);
+        yield* repository.save(pokemon);
+        return pokemon;
+      });
+
+      const remove = Effect.fn('Pokedex.remove')(function* (id: number) {
+        // `repository.remove` already reports whether the id was there, so the
+        // find-then-delete pair collapses into one call with the same result.
+        const removed = yield* repository.remove(id);
+        if (!removed) yield* new PokemonNotFound({ id });
+      });
+
+      return { list, getById, create, replace, remove };
     }),
   );
 
