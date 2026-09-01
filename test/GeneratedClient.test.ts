@@ -18,16 +18,11 @@
  */
 import { NodeHttpServer } from '@effect/platform-node';
 import { assert, layer } from '@effect/vitest';
-import { ConfigProvider, Effect, Layer } from 'effect';
+import { Effect, Layer } from 'effect';
 import { HttpClient, HttpRouter } from 'effect/unstable/http';
 import type { PokedexClient } from '../src/generated/Client.js';
 import { make as makePokedexClient } from '../src/generated/Client.js';
 import { AppLayer } from '../src/http/AppLayer.js';
-
-/** The flaky upstream off, or one list call in ten is a coin flip. */
-const DeterministicConfig = ConfigProvider.layer(
-  ConfigProvider.fromEnvRecord({ FLAKY_UPSTREAM_RATE: '0' }),
-);
 
 /**
  * The real server, on a real port. `disableListenLog`/`disableLogger` only
@@ -36,10 +31,7 @@ const DeterministicConfig = ConfigProvider.layer(
 const ServerLayer = HttpRouter.serve(AppLayer, {
   disableLogger: true,
   disableListenLog: true,
-}).pipe(
-  Layer.provide(DeterministicConfig),
-  Layer.provideMerge(NodeHttpServer.layerTest),
-);
+}).pipe(Layer.provideMerge(NodeHttpServer.layerTest));
 
 const client: Effect.Effect<PokedexClient, never, HttpClient.HttpClient> =
   Effect.map(HttpClient.HttpClient, (httpClient) =>

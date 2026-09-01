@@ -27,19 +27,15 @@ import { Pokedex } from '../src/services/Pokedex.js';
 const makeClient = HttpApiTest.groups(ServerApi, ['Pokedex']);
 
 /**
- * Pins the flaky upstream off. Without it `fetchAll` fails one call in ten and
- * every list assertion below becomes a coin flip.
+ * Pins every `fetchAll` to fail, so the 500 path is reachable. There is no
+ * opposite pin any more: `FLAKY_UPSTREAM_RATE` defaults to `0`, so the ordinary
+ * suites are deterministic without one.
  */
-const DeterministicConfig = ConfigProvider.layer(
-  ConfigProvider.fromEnvRecord({ FLAKY_UPSTREAM_RATE: '0' }),
-);
-
-/** The opposite pin: every `fetchAll` fails, so the 500 path is reachable. */
 const CorruptUpstreamConfig = ConfigProvider.layer(
   ConfigProvider.fromEnvRecord({ FLAKY_UPSTREAM_RATE: '1' }),
 );
 
-const handlersWith = (config: Layer.Layer<never>) =>
+const handlersWith = (config: Layer.Layer<never> = Layer.empty) =>
   Layer.mergeAll(
     PokedexHandlers.pipe(
       Layer.provideMerge(SchemaErrorHandlerLayer),
@@ -49,7 +45,7 @@ const handlersWith = (config: Layer.Layer<never>) =>
     HttpServer.layerServices,
   );
 
-const TestLayer = handlersWith(DeterministicConfig);
+const TestLayer = handlersWith();
 
 const idsOf = (items: ReadonlyArray<PokemonVariant>) =>
   items.map((pokemon) => pokemon.id);
@@ -417,7 +413,7 @@ layer(handlersWith(CorruptUpstreamConfig))(
  * statuses or bodies. Drive the real router for those — and for requests the
  * client would refuse to encode in the first place, like an out-of-range id.
  */
-const routesWith = (config: Layer.Layer<never>) =>
+const routesWith = (config: Layer.Layer<never> = Layer.empty) =>
   AppLayer.pipe(
     Layer.provide(config),
     Layer.provideMerge(HttpServer.layerServices),
@@ -471,7 +467,7 @@ const jsonPost = (path: string, body: unknown) =>
   HttpClientRequest.post(path).pipe(HttpClientRequest.bodyJsonUnsafe(body));
 
 layer(HttpServer.layerServices)('Pokedex routes', (it) => {
-  const get = getVia(routesWith(DeterministicConfig));
+  const get = getVia(routesWith());
 
   it.effect('GET /pokemon responds 200 with JSON', () =>
     Effect.gen(function* () {
@@ -530,7 +526,7 @@ layer(HttpServer.layerServices)('Pokedex routes', (it) => {
     }),
   );
 
-  const routes = routesWith(DeterministicConfig);
+  const routes = routesWith();
 
   it.effect('POST /pokemon responds 201 with the created variant', () =>
     Effect.gen(function* () {

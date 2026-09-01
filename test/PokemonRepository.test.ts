@@ -1,5 +1,5 @@
 import { assert, describe, it } from '@effect/vitest';
-import { ConfigProvider, Effect, Layer, Option } from 'effect';
+import { Config, ConfigProvider, Effect, Layer, Option, Random } from 'effect';
 import { PokemonDataParse } from '../src/domain/Errors.js';
 import type { PokemonVariant } from '../src/generated/Api.js';
 import {
@@ -21,7 +21,11 @@ const repositoryWithFlakyRate = (rate: number) =>
     ),
   );
 
-const Deterministic = repositoryWithFlakyRate(0);
+/**
+ * The default rate is `0`, so the plain layer is already deterministic — the
+ * explicit pin stays only where a test asserts something *about* the rate.
+ */
+const Deterministic = PokemonRepository.layerInMemory;
 const AlwaysCorrupt = repositoryWithFlakyRate(1);
 
 /**
@@ -30,7 +34,7 @@ const AlwaysCorrupt = repositoryWithFlakyRate(1);
  */
 const withRepository = <A, E>(
   program: Effect.Effect<A, E, PokemonRepository>,
-  layer: typeof Deterministic = Deterministic,
+  layer: Layer.Layer<PokemonRepository, Config.ConfigError> = Deterministic,
 ) => program.pipe(Effect.provide(layer, { local: true }));
 
 const missingno: PokemonVariant = {
@@ -175,7 +179,7 @@ describe('PokemonRepository.layerInMemory', () => {
     ),
   );
 
-  it.effect('fetchAll never fails at FLAKY_UPSTREAM_RATE=0', () =>
+  it.effect('fetchAll never fails at the default rate of 0', () =>
     withRepository(
       Effect.gen(function* () {
         const repository = yield* PokemonRepository;
@@ -203,5 +207,38 @@ describe('PokemonRepository.layerInMemory', () => {
         }),
         AlwaysCorrupt,
       ),
+  );
+
+  /**
+   * The 0 and 1 pins above never exercise the comparison itself — at those
+   * rates the branch is decided whatever the roll is. Reading the roll from
+   * `Random` rather than `Math.random()` is what makes the threshold testable:
+   * a seeded generator produces a known sequence, so the same rate can be
+   * placed either side of the same first roll.
+   */
+  it.effect('fetchAll compares the roll against the rate', () =>
+    Effect.gen(function* () {
+      const seed = 'pokedex-flaky-upstream';
+
+      const firstRoll = yield* Random.next.pipe(Random.withSeed(seed));
+      assert.isAbove(firstRoll, 0);
+      assert.isBelow(firstRoll, 1);
+
+      // A rate just above that roll fails; the same roll under a rate just
+      // below it does not. Both run the comparison for real.
+      const justAbove = yield* Effect.flip(
+        withRepository(
+          Effect.flatMap(PokemonRepository, (r) => r.fetchAll),
+          repositoryWithFlakyRate(firstRoll + Number.EPSILON),
+        ),
+      ).pipe(Random.withSeed(seed));
+      const justBelow = yield* withRepository(
+        Effect.flatMap(PokemonRepository, (r) => r.fetchAll),
+        repositoryWithFlakyRate(firstRoll),
+      ).pipe(Random.withSeed(seed));
+
+      assert.instanceOf(justAbove, PokemonDataParse);
+      assert.deepStrictEqual(justBelow, seedPokemon);
+    }),
   );
 });

@@ -111,11 +111,12 @@ After changing anything under `tsp/`, run `npm run generate` and commit the rege
 
 ## Configuration
 
-| Variable              | Default | What it does                                                                                                                                                           |
-| --------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `PORT`                | `3000`  | Port the HTTP server listens on                                                                                                                                        |
-| `APP_VERSION`         | `1.0.0` | `version` reported by the health endpoints                                                                                                                             |
-| `FLAKY_UPSTREAM_RATE` | `0.1`   | Probability the simulated upstream returns unparseable data — a kept quirk of the original implementation (parity decision P1). Set to `0` for deterministic behaviour |
+| Variable              | Default  | What it does                                                                                                                                                       |
+| --------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `PORT`                | `3000`   | Port the HTTP server listens on                                                                                                                                    |
+| `APP_VERSION`         | `1.0.0`  | `version` reported by the health endpoints, and `service.version` on exported telemetry                                                                            |
+| `FLAKY_UPSTREAM_RATE` | `0`      | Opt-in chaos switch: probability that the simulated upstream returns unparseable data, so `GET /pokemon` answers a 500 (parity decision P1). Off unless you set it |
+| `OTLP_URL`            | _unset_  | Base URL of an OTLP collector, e.g. `http://localhost:4318`. Set it and spans go to `/v1/traces` and log records to `/v1/logs`; unset, neither is exported          |
 
 ## Endpoints
 

@@ -34,6 +34,7 @@ import { AppLayer } from '../src/http/AppLayer.js';
 import { AllRoutes } from '../src/http/Routes.js';
 import { VALIDATION_ERROR_CODE } from '../src/http/ServerApi.js';
 import { Health } from '../src/services/Health.js';
+import { HealthChecks } from '../src/services/HealthChecks.js';
 import { Pokedex } from '../src/services/Pokedex.js';
 
 /** The defect every suite below forces. */
@@ -283,7 +284,14 @@ const DyingPokedex = Layer.succeed(Pokedex)(
 );
 
 const DyingRoutes = Layer.mergeAll(
-  AllRoutes.pipe(Layer.provide([Health.layer, DyingPokedex])),
+  AllRoutes.pipe(
+    Layer.provide([Health.layer, DyingPokedex]),
+    // The health side is not what is under test here, and this suite has no
+    // repository for the real registry to probe.
+    Layer.provide(
+      HealthChecks.layerOf({ database: { status: 'healthy', latencyMs: 0 } }),
+    ),
+  ),
   DefectBoundary,
 ).pipe(Layer.provideMerge(HttpServer.layerServices));
 
