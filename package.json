@@ -5,7 +5,8 @@
   "scripts": {
     "typespec:compile": "tsp compile tsp/main.tsp --config tspconfig.yaml",
     "generate:api": "openapigen --spec tsp-output/openapi.yaml --format httpapi --name PokedexApi > src/generated/Api.ts && oxfmt src/generated/Api.ts",
-    "generate": "npm run typespec:compile && npm run generate:api",
+    "generate:client": "openapigen --spec tsp-output/openapi.yaml --format httpclient --name PokedexClient > src/generated/Client.ts && oxfmt src/generated/Client.ts",
+    "generate": "npm run typespec:compile && npm run generate:api && npm run generate:client",
     "dev": "tsx watch src/main.ts",
     "build": "tsc -p tsconfig.build.json",
     "start": "node dist/main.js",
