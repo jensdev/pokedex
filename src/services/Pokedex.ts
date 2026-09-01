@@ -44,6 +44,19 @@ const sortValue: Record<SortBy, (pokemon: PokemonVariant) => string | number> =
   };
 
 /**
+ * Drops the keys whose value is `undefined`, so an absent filter is left off the
+ * span instead of recorded as nothing. A trace query on
+ * `pokedex.filter.type` then matches only the calls that really filtered by
+ * type.
+ */
+const definedAttributes = (
+  attributes: Readonly<Record<string, unknown>>,
+): Record<string, unknown> =>
+  Object.fromEntries(
+    Object.entries(attributes).filter(([, value]) => value !== undefined),
+  );
+
+/**
  * Strings compare with `localeCompare`, numbers numerically. `createdAt` is an
  * ISO 8601 instant, so comparing it as a string is chronological order.
  */
@@ -139,6 +152,27 @@ export class Pokedex extends Context.Service<
       const list = Effect.fn('Pokedex.list')(function* (
         query: ListPokemonQuery,
       ) {
+        const page = query.page ?? DEFAULT_PAGE;
+        const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
+
+        // The *effective* query, defaults resolved — what the span should show
+        // is what the call actually did, not what the caller happened to send.
+        yield* Effect.annotateCurrentSpan(
+          definedAttributes({
+            'pokedex.filter.classification': query.classification,
+            'pokedex.filter.type': query.type,
+            'pokedex.filter.search': query.search,
+            'pokedex.sortBy': query.sortBy,
+            // Only meaningful when something is being sorted.
+            'pokedex.sortOrder':
+              query.sortBy === undefined
+                ? undefined
+                : (query.sortOrder ?? 'asc'),
+            'pokedex.page': page,
+            'pokedex.pageSize': pageSize,
+          }),
+        );
+
         const all = yield* repository.fetchAll;
 
         const filtered = filterAll(all, query);
@@ -146,9 +180,6 @@ export class Pokedex extends Context.Service<
           query.sortBy === undefined
             ? filtered
             : sortAll(filtered, query.sortBy, query.sortOrder ?? 'asc');
-
-        const page = query.page ?? DEFAULT_PAGE;
-        const pageSize = query.pageSize ?? DEFAULT_PAGE_SIZE;
 
         return {
           items: ordered.slice(page * pageSize, (page + 1) * pageSize),
@@ -160,6 +191,7 @@ export class Pokedex extends Context.Service<
       });
 
       const getById = Effect.fn('Pokedex.getById')(function* (id: number) {
+        yield* Effect.annotateCurrentSpan('pokedex.id', id);
         const found = yield* repository.findById(id);
         if (Option.isNone(found)) return yield* new PokemonNotFound({ id });
         return found.value;
@@ -176,6 +208,9 @@ export class Pokedex extends Context.Service<
         input: CreatePokemonRequest,
       ) {
         const id = yield* repository.nextId;
+        // Annotated after allocation: the id is what the call produced, not
+        // something the caller supplied.
+        yield* Effect.annotateCurrentSpan('pokedex.id', id);
         // One read of the clock: `createdAt` and `updatedAt` must be equal on
         // a create (behavior spec §createPokemon).
         const now = yield* nowIso;
@@ -193,6 +228,7 @@ export class Pokedex extends Context.Service<
         id: number,
         input: UpdatePokemonRequest,
       ) {
+        yield* Effect.annotateCurrentSpan('pokedex.id', id);
         const existing = yield* repository.findById(id);
         if (Option.isNone(existing)) return yield* new PokemonNotFound({ id });
 
@@ -204,6 +240,7 @@ export class Pokedex extends Context.Service<
       });
 
       const remove = Effect.fn('Pokedex.remove')(function* (id: number) {
+        yield* Effect.annotateCurrentSpan('pokedex.id', id);
         // `repository.remove` already reports whether the id was there, so the
         // find-then-delete pair collapses into one call with the same result.
         const removed = yield* repository.remove(id);

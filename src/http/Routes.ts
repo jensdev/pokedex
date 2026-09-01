@@ -1,12 +1,14 @@
 /**
  * Route composition: the generated API mounted on an `HttpRouter`, plus the
- * OpenAPI document and the interactive Scalar reference.
+ * OpenAPI document, the interactive Scalar reference, and the defect boundary
+ * that covers all three.
  */
 import { Layer } from 'effect';
 import { HttpApiBuilder, HttpApiScalar } from 'effect/unstable/httpapi';
 import { PokedexApi } from '../generated/Api.js';
 import { Health } from '../services/Health.js';
 import { Pokedex } from '../services/Pokedex.js';
+import { DefectBoundary } from './Defects.js';
 import { HealthHandlers } from './HealthHandlers.js';
 import { PokedexHandlers } from './PokedexHandlers.js';
 
@@ -25,4 +27,8 @@ export const ApiRoutes = HttpApiBuilder.layer(PokedexApi, {
 /** Interactive API docs. */
 export const DocsRoute = HttpApiScalar.layer(PokedexApi, { path: '/docs' });
 
-export const AllRoutes = Layer.mergeAll(ApiRoutes, DocsRoute);
+/**
+ * Everything the server serves. {@link DefectBoundary} is global middleware, so
+ * merging it in wraps every route registered by the layers next to it.
+ */
+export const AllRoutes = Layer.mergeAll(ApiRoutes, DocsRoute, DefectBoundary);
