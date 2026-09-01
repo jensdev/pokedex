@@ -1,5 +1,5 @@
 import { assert, layer } from '@effect/vitest';
-import { ConfigProvider, Effect, Exit, Layer } from 'effect';
+import { Cause, ConfigProvider, Effect, Exit, Layer, Logger } from 'effect';
 import {
   HttpClientRequest,
   HttpRouter,
@@ -13,7 +13,10 @@ import type {
   CreatePokemonRequest,
   PokemonVariant,
 } from '../src/generated/Api.js';
-import { PokedexHandlers } from '../src/http/PokedexHandlers.js';
+import {
+  DATA_PARSE_LOG_MESSAGE,
+  PokedexHandlers,
+} from '../src/http/PokedexHandlers.js';
 import { AppLayer } from '../src/http/AppLayer.js';
 import { SchemaErrorHandlerLayer, ServerApi } from '../src/http/ServerApi.js';
 import { Pokedex } from '../src/services/Pokedex.js';
@@ -335,6 +338,28 @@ layer(HttpServer.layerServices)('Pokedex API — writes', (it) => {
   );
 });
 
+/**
+ * Collects log records instead of printing them, and hands back both what the
+ * program produced and what it logged. `Logger.layer` replaces the default
+ * logger, so nothing reaches stderr and the assertions see every record.
+ */
+const withCapturedLogs = <A, E, R>(program: Effect.Effect<A, E, R>) =>
+  Effect.gen(function* () {
+    const entries: Array<{
+      readonly logLevel: string;
+      readonly message: unknown;
+      readonly cause: Cause.Cause<unknown>;
+    }> = [];
+    const collector = Logger.make<unknown, void>(
+      ({ cause, logLevel, message }) => {
+        entries.push({ logLevel, message, cause });
+      },
+    );
+
+    const value = yield* Effect.provide(program, Logger.layer([collector]));
+    return { value, entries } as const;
+  });
+
 layer(handlersWith(CorruptUpstreamConfig))(
   'Pokedex API — corrupt upstream',
   (it) => {
@@ -354,6 +379,35 @@ layer(handlersWith(CorruptUpstreamConfig))(
             message: 'Pokemon data from source failed to parse',
           });
         }),
+    );
+
+    /**
+     * Finding 4: the only 500 the service can raise used to leave no trace.
+     * `mapError` discards the cause on its way to the contract body, and the
+     * body says nothing on purpose — so the log is the only place the reason
+     * survives, and it has to be at `Error`, like the defect boundary's.
+     */
+    it.effect('listPokemon logs the cause it maps away', () =>
+      Effect.gen(function* () {
+        const client = yield* makeClient;
+
+        const { entries } = yield* withCapturedLogs(
+          Effect.flip(client.Pokedex.listPokemon({ query: {} })),
+        );
+
+        const logged = entries.filter(
+          (entry) =>
+            Array.isArray(entry.message) &&
+            entry.message.includes(DATA_PARSE_LOG_MESSAGE),
+        );
+        assert.lengthOf(logged, 1);
+
+        const [entry] = logged;
+        assert.strictEqual(entry.logLevel, 'Error');
+        // The cause travels as the record's `cause`, not stringified into the
+        // message, so the failure that was mapped away is still identifiable.
+        assert.include(Cause.pretty(entry.cause), 'PokemonDataParse');
+      }),
     );
   },
 );

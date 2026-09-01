@@ -4,11 +4,8 @@
  * A *defect* is anything the contract does not model: a thrown exception, an
  * `Effect.die`, a bug. The platform already turns one into a 500 — but an
  * **empty** one (`HttpServerError.causeResponse` falls back to
- * `Response.empty({ status: 500 })`), and it only reports the cause when an
- * `ErrorReporter` is installed, which by default there is not
- * (`CurrentErrorReporters` defaults to an empty set). So a defect would
- * currently vanish silently and answer with a body the contract does not
- * declare.
+ * `Response.empty({ status: 500 })`), and the body a defect answers with is not
+ * one the contract declares.
  *
  * This middleware closes both gaps in one place:
  *
@@ -18,8 +15,15 @@
  *   declares as its `default` (= 500) response.
  *
  * Typed failures pass straight through: they are contract responses and the
- * handlers have already mapped them (`PokemonNotFound` → empty 404,
+ * handlers have already mapped them (`PokemonNotFound` → `ApiError` 404,
  * `PokemonDataParse` → `ApiError` 500), as does `RouteNotFound` → 404.
+ *
+ * This boundary is not the only reporter any more, and the two do not overlap:
+ * it covers everything that reaches a *route*, while the `ErrorReporter` in
+ * `src/Observability.ts` covers the failures the server raises outside that
+ * scope — a response that fails to write, a failure in the server chain — which
+ * the platform hands to `reportCauseUnsafe` and which vanished while
+ * `CurrentErrorReporters` was the empty set it defaults to.
  */
 import { Cause, Effect } from 'effect';
 import {
