@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# A superseded run on the same ref has nothing left to prove.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # One job on purpose: the contract gate and the quality gate share the same
+  # `npm ci`, and splitting them would buy a little parallelism for a second
+  # install and a second checkout.
+  check:
+    name: Contract + check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # `tsp/` is the source of truth: `tsp-output/openapi.yaml` and
+      # `src/generated/Api.ts` are emitted from it and committed. Regenerating
+      # and finding a diff means someone edited a generated file by hand or
+      # changed `tsp/` without running `npm run generate` — either way the
+      # contract and the code have parted ways.
+      - name: Contract drift gate
+        run: |
+          npm run generate
+          # Prints the drift before failing, so the log says what went stale.
+          git diff --exit-code
+          # `git diff` is blind to files generation may have *added*.
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "::error::npm run generate produced untracked files:"
+            git status --porcelain
+            exit 1
+          fi
+
+      # lint + format:check + typecheck + test.
+      - run: npm run check
