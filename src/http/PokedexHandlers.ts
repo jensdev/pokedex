@@ -13,6 +13,10 @@
  * only thing keeping a 404 from going out as a 400. TypeScript enforces it —
  * the literal type is part of the member.
  *
+ * Built against `ServerApi`, not the generated `PokedexApi`: the schema-error
+ * middleware is baked into a group's routes at build time, so a group built
+ * from the bare contract silently loses it.
+ *
  * Statuses are the contract's, not the handlers': `createPokemon` is annotated
  * 201 and `deletePokemon` `Empty(204)` in the generated api, so the handlers
  * return the variant and `void` respectively and the builder does the rest.
@@ -20,8 +24,8 @@
 import { Effect } from 'effect';
 import { HttpApiBuilder } from 'effect/unstable/httpapi';
 import type { ApiError } from '../generated/Api.js';
-import { PokedexApi } from '../generated/Api.js';
 import { Pokedex } from '../services/Pokedex.js';
+import { ServerApi } from './ServerApi.js';
 
 /** The upstream data set failed to parse — contract-correct 500 body. */
 const dataParseError = (): ApiError => ({
@@ -41,7 +45,7 @@ const notFound = (id: number) =>
   } as const);
 
 export const PokedexHandlers = HttpApiBuilder.group(
-  PokedexApi,
+  ServerApi,
   'Pokedex',
   Effect.fn(function* (handlers) {
     const pokedex = yield* Pokedex;

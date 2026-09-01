@@ -13,12 +13,15 @@ import type {
   CreatePokemonRequest,
   PokemonVariant,
 } from '../src/generated/Api.js';
-import { PokedexApi } from '../src/generated/Api.js';
 import { PokedexHandlers } from '../src/http/PokedexHandlers.js';
 import { AllRoutes } from '../src/http/Routes.js';
+import { SchemaErrorHandlerLayer, ServerApi } from '../src/http/ServerApi.js';
 import { Pokedex } from '../src/services/Pokedex.js';
 
-const makeClient = HttpApiTest.groups(PokedexApi, ['Pokedex']);
+// `ServerApi`, not the generated `PokedexApi`: the handlers are built against
+// the api that carries the schema-error middleware, and the typed client has to
+// describe the same endpoints.
+const makeClient = HttpApiTest.groups(ServerApi, ['Pokedex']);
 
 /**
  * Pins the flaky upstream off. Without it `fetchAll` fails one call in ten and
@@ -35,7 +38,11 @@ const CorruptUpstreamConfig = ConfigProvider.layer(
 
 const handlersWith = (config: Layer.Layer<never>) =>
   Layer.mergeAll(
-    PokedexHandlers.pipe(Layer.provide(Pokedex.layer), Layer.provide(config)),
+    PokedexHandlers.pipe(
+      Layer.provideMerge(SchemaErrorHandlerLayer),
+      Layer.provide(Pokedex.layer),
+      Layer.provide(config),
+    ),
     HttpServer.layerServices,
   );
 

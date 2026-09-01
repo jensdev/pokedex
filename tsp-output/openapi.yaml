@@ -49,19 +49,7 @@ paths:
                     additionalProperties:
                       type: string
                     description: Optional additional context about the error.
-                description: |-
-                  `ApiError` with `code` pinned to the one value a given status uses.
-
-                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
-                  `Schema.Union` of the endpoint's error members **in declaration order, first
-                  match wins**. Three structurally identical `ApiError` members (400, 404, and
-                  the `default` 500) would make every typed failure encode as the first one —
-                  400 — whatever the handler meant. Pinning `code` per status makes the members
-                  disjoint, so the value selects its own status, and the generated literal type
-                  makes a handler that picks the wrong one a compile error.
-
-                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
-                  is the catch-all it reads as, and internal failures do not share one code.
+                description: An `ApiError` whose `code` is fixed to the one this status uses.
         default:
           description: An unexpected error response.
           content:
@@ -108,19 +96,7 @@ paths:
                     additionalProperties:
                       type: string
                     description: Optional additional context about the error.
-                description: |-
-                  `ApiError` with `code` pinned to the one value a given status uses.
-
-                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
-                  `Schema.Union` of the endpoint's error members **in declaration order, first
-                  match wins**. Three structurally identical `ApiError` members (400, 404, and
-                  the `default` 500) would make every typed failure encode as the first one —
-                  400 — whatever the handler meant. Pinning `code` per status makes the members
-                  disjoint, so the value selects its own status, and the generated literal type
-                  makes a handler that picks the wrong one a compile error.
-
-                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
-                  is the catch-all it reads as, and internal failures do not share one code.
+                description: An `ApiError` whose `code` is fixed to the one this status uses.
         default:
           description: An unexpected error response.
           content:
@@ -168,19 +144,7 @@ paths:
                     additionalProperties:
                       type: string
                     description: Optional additional context about the error.
-                description: |-
-                  `ApiError` with `code` pinned to the one value a given status uses.
-
-                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
-                  `Schema.Union` of the endpoint's error members **in declaration order, first
-                  match wins**. Three structurally identical `ApiError` members (400, 404, and
-                  the `default` 500) would make every typed failure encode as the first one —
-                  400 — whatever the handler meant. Pinning `code` per status makes the members
-                  disjoint, so the value selects its own status, and the generated literal type
-                  makes a handler that picks the wrong one a compile error.
-
-                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
-                  is the catch-all it reads as, and internal failures do not share one code.
+                description: An `ApiError` whose `code` is fixed to the one this status uses.
         '503':
           description: The service is not ready to accept traffic.
           content:
@@ -262,19 +226,7 @@ paths:
                     additionalProperties:
                       type: string
                     description: Optional additional context about the error.
-                description: |-
-                  `ApiError` with `code` pinned to the one value a given status uses.
-
-                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
-                  `Schema.Union` of the endpoint's error members **in declaration order, first
-                  match wins**. Three structurally identical `ApiError` members (400, 404, and
-                  the `default` 500) would make every typed failure encode as the first one —
-                  400 — whatever the handler meant. Pinning `code` per status makes the members
-                  disjoint, so the value selects its own status, and the generated literal type
-                  makes a handler that picks the wrong one a compile error.
-
-                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
-                  is the catch-all it reads as, and internal failures do not share one code.
+                description: An `ApiError` whose `code` is fixed to the one this status uses.
         default:
           description: An unexpected error response.
           content:
@@ -318,19 +270,7 @@ paths:
                     additionalProperties:
                       type: string
                     description: Optional additional context about the error.
-                description: |-
-                  `ApiError` with `code` pinned to the one value a given status uses.
-
-                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
-                  `Schema.Union` of the endpoint's error members **in declaration order, first
-                  match wins**. Three structurally identical `ApiError` members (400, 404, and
-                  the `default` 500) would make every typed failure encode as the first one —
-                  400 — whatever the handler meant. Pinning `code` per status makes the members
-                  disjoint, so the value selects its own status, and the generated literal type
-                  makes a handler that picks the wrong one a compile error.
-
-                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
-                  is the catch-all it reads as, and internal failures do not share one code.
+                description: An `ApiError` whose `code` is fixed to the one this status uses.
         default:
           description: An unexpected error response.
           content:
@@ -391,19 +331,7 @@ paths:
                     additionalProperties:
                       type: string
                     description: Optional additional context about the error.
-                description: |-
-                  `ApiError` with `code` pinned to the one value a given status uses.
-
-                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
-                  `Schema.Union` of the endpoint's error members **in declaration order, first
-                  match wins**. Three structurally identical `ApiError` members (400, 404, and
-                  the `default` 500) would make every typed failure encode as the first one —
-                  400 — whatever the handler meant. Pinning `code` per status makes the members
-                  disjoint, so the value selects its own status, and the generated literal type
-                  makes a handler that picks the wrong one a compile error.
-
-                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
-                  is the catch-all it reads as, and internal failures do not share one code.
+                description: An `ApiError` whose `code` is fixed to the one this status uses.
         '404':
           description: No Pokemon with this id exists.
           content:
@@ -427,19 +355,7 @@ paths:
                     additionalProperties:
                       type: string
                     description: Optional additional context about the error.
-                description: |-
-                  `ApiError` with `code` pinned to the one value a given status uses.
-
-                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
-                  `Schema.Union` of the endpoint's error members **in declaration order, first
-                  match wins**. Three structurally identical `ApiError` members (400, 404, and
-                  the `default` 500) would make every typed failure encode as the first one —
-                  400 — whatever the handler meant. Pinning `code` per status makes the members
-                  disjoint, so the value selects its own status, and the generated literal type
-                  makes a handler that picks the wrong one a compile error.
-
-                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
-                  is the catch-all it reads as, and internal failures do not share one code.
+                description: An `ApiError` whose `code` is fixed to the one this status uses.
         default:
           description: An unexpected error response.
           content:
@@ -488,19 +404,7 @@ paths:
                     additionalProperties:
                       type: string
                     description: Optional additional context about the error.
-                description: |-
-                  `ApiError` with `code` pinned to the one value a given status uses.
-
-                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
-                  `Schema.Union` of the endpoint's error members **in declaration order, first
-                  match wins**. Three structurally identical `ApiError` members (400, 404, and
-                  the `default` 500) would make every typed failure encode as the first one —
-                  400 — whatever the handler meant. Pinning `code` per status makes the members
-                  disjoint, so the value selects its own status, and the generated literal type
-                  makes a handler that picks the wrong one a compile error.
-
-                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
-                  is the catch-all it reads as, and internal failures do not share one code.
+                description: An `ApiError` whose `code` is fixed to the one this status uses.
         '404':
           description: No Pokemon with this id exists.
           content:
@@ -524,19 +428,7 @@ paths:
                     additionalProperties:
                       type: string
                     description: Optional additional context about the error.
-                description: |-
-                  `ApiError` with `code` pinned to the one value a given status uses.
-
-                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
-                  `Schema.Union` of the endpoint's error members **in declaration order, first
-                  match wins**. Three structurally identical `ApiError` members (400, 404, and
-                  the `default` 500) would make every typed failure encode as the first one —
-                  400 — whatever the handler meant. Pinning `code` per status makes the members
-                  disjoint, so the value selects its own status, and the generated literal type
-                  makes a handler that picks the wrong one a compile error.
-
-                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
-                  is the catch-all it reads as, and internal failures do not share one code.
+                description: An `ApiError` whose `code` is fixed to the one this status uses.
         default:
           description: An unexpected error response.
           content:
@@ -587,19 +479,7 @@ paths:
                     additionalProperties:
                       type: string
                     description: Optional additional context about the error.
-                description: |-
-                  `ApiError` with `code` pinned to the one value a given status uses.
-
-                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
-                  `Schema.Union` of the endpoint's error members **in declaration order, first
-                  match wins**. Three structurally identical `ApiError` members (400, 404, and
-                  the `default` 500) would make every typed failure encode as the first one —
-                  400 — whatever the handler meant. Pinning `code` per status makes the members
-                  disjoint, so the value selects its own status, and the generated literal type
-                  makes a handler that picks the wrong one a compile error.
-
-                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
-                  is the catch-all it reads as, and internal failures do not share one code.
+                description: An `ApiError` whose `code` is fixed to the one this status uses.
         '404':
           description: No Pokemon with this id exists.
           content:
@@ -623,19 +503,7 @@ paths:
                     additionalProperties:
                       type: string
                     description: Optional additional context about the error.
-                description: |-
-                  `ApiError` with `code` pinned to the one value a given status uses.
-
-                  Not cosmetic. `HttpApiBuilder` encodes a handler's failure against a
-                  `Schema.Union` of the endpoint's error members **in declaration order, first
-                  match wins**. Three structurally identical `ApiError` members (400, 404, and
-                  the `default` 500) would make every typed failure encode as the first one —
-                  400 — whatever the handler meant. Pinning `code` per status makes the members
-                  disjoint, so the value selects its own status, and the generated literal type
-                  makes a handler that picks the wrong one a compile error.
-
-                  The `default` 500 keeps the open `ApiError`: it is last in the union, so it
-                  is the catch-all it reads as, and internal failures do not share one code.
+                description: An `ApiError` whose `code` is fixed to the one this status uses.
         default:
           description: An unexpected error response.
           content:
@@ -1109,12 +977,7 @@ components:
       type: integer
       format: int32
       minimum: 1
-      description: |-
-        A National Pokédex number, or a generated id.
-
-        Deliberately uncapped (decision D2 in the hardening plan): entries created
-        through `POST /pokemon` get ids from `FIRST_GENERATED_ID = 1026` upwards, so
-        a `@maxValue(1025)` on the path parameter would make them unaddressable.
+      description: A National Pokédex number, or a generated id.
     PokemonType:
       type: string
       enum:

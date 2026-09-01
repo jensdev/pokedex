@@ -8,7 +8,15 @@
  * for the bug nobody wrote yet.
  */
 import { assert, layer } from '@effect/vitest';
-import { Cause, ConfigProvider, Effect, Exit, Layer, Logger } from 'effect';
+import {
+  Cause,
+  ConfigProvider,
+  Effect,
+  Exit,
+  Layer,
+  Logger,
+  Predicate,
+} from 'effect';
 import {
   HttpClientRequest,
   HttpRouter,
@@ -18,7 +26,6 @@ import {
   HttpServerResponse,
 } from 'effect/unstable/http';
 import { HttpApiBuilder } from 'effect/unstable/httpapi';
-import { PokedexApi } from '../src/generated/Api.js';
 import {
   DEFECT_LOG_MESSAGE,
   DefectBoundary,
@@ -27,6 +34,11 @@ import {
 import { HealthHandlers } from '../src/http/HealthHandlers.js';
 import { PokedexHandlers } from '../src/http/PokedexHandlers.js';
 import { AllRoutes } from '../src/http/Routes.js';
+import {
+  SchemaErrorHandlerLayer,
+  ServerApi,
+  VALIDATION_ERROR_CODE,
+} from '../src/http/ServerApi.js';
 import { Health } from '../src/services/Health.js';
 import { Pokedex } from '../src/services/Pokedex.js';
 
@@ -168,11 +180,16 @@ layer(HttpServer.layerServices)('Defect boundary — AllRoutes', (it) => {
   );
 
   /**
-   * `HttpApiBuilder` reports a schema violation by *dying* with an
-   * `HttpApiSchemaError`, which is `Respondable` and answers 400 itself. The
-   * boundary has to let that one past, or every rejected request becomes a 500.
+   * A schema violation is not a bug, and the boundary must not treat it as one.
+   *
+   * Without the middleware, `HttpApiBuilder` reports one by *dying* with a
+   * `Respondable` `HttpApiSchemaError` that answers an empty 400 — the boundary
+   * has to let that past or every rejected request becomes a 500.
+   * `SchemaErrorHandler` now catches it earlier and answers the contract's
+   * `ApiError` instead, so the request never reaches the boundary at all. Both
+   * halves are asserted here: contract body out, nothing in the log.
    */
-  it.effect('a respondable defect keeps its own status and is not logged', () =>
+  it.effect('a schema violation answers 400 with the contract body', () =>
     Effect.gen(function* () {
       const { value: response, entries } = yield* withCapturedLogs(
         Effect.flatMap(sendVia(RoutesWithBoom), (send) =>
@@ -182,6 +199,10 @@ layer(HttpServer.layerServices)('Defect boundary — AllRoutes', (it) => {
       );
 
       assert.strictEqual(response.status, 400);
+      assert.include(
+        response.headers['content-type'] ?? '',
+        'application/json',
+      );
       assert.deepStrictEqual(
         entries.filter(
           (entry) =>
@@ -192,6 +213,63 @@ layer(HttpServer.layerServices)('Defect boundary — AllRoutes', (it) => {
       );
     }),
   );
+
+  /**
+   * Finding 1: every one of these used to answer `400`, no content type, empty
+   * body — undecodable by the generated client, and undeclared by nothing
+   * except the spec that promised an `ApiError`. One case per `kind` the
+   * platform reports (`Params`, `Query`, `Payload`), because the middleware
+   * sees them at three different points in the request pipeline.
+   */
+  const violations = [
+    {
+      what: 'a bad path param',
+      kind: 'Params',
+      request: () => HttpClientRequest.get('/pokemon/0'),
+    },
+    {
+      what: 'a bad query',
+      kind: 'Query',
+      request: () => HttpClientRequest.get('/pokemon?pageSize=0'),
+    },
+    {
+      what: 'a bad payload',
+      kind: 'Payload',
+      request: () =>
+        HttpClientRequest.post('/pokemon').pipe(
+          HttpClientRequest.bodyJsonUnsafe({ name: 'missingno' }),
+        ),
+    },
+  ] as const;
+
+  for (const { what, kind, request } of violations) {
+    it.effect(`${what} answers an ApiError-shaped 400`, () =>
+      Effect.gen(function* () {
+        const send = yield* sendVia(RoutesWithBoom);
+
+        const response = yield* send(request());
+
+        assert.strictEqual(response.status, 400);
+        const body = parseJson(yield* bodyOf(response));
+        assert.isTrue(
+          Predicate.isReadonlyObject(body),
+          'the 400 body is a JSON object',
+        );
+        if (!Predicate.isReadonlyObject(body)) return;
+        // Exactly the contract's `ApiError` — `code` is the literal the 400
+        // member of the error union is pinned to, and no `_tag` from the
+        // server's own error type leaks onto the wire.
+        assert.deepStrictEqual(Object.keys(body).toSorted(), [
+          'code',
+          'message',
+        ]);
+        assert.strictEqual(body['code'], VALIDATION_ERROR_CODE);
+        // The message names the part of the request that was wrong, and why.
+        assert.isString(body['message']);
+        assert.include(String(body['message']), kind);
+      }),
+    );
+  }
 });
 
 /**
@@ -211,8 +289,9 @@ const DyingPokedex = Layer.succeed(Pokedex)(
 );
 
 const DyingRoutes = Layer.mergeAll(
-  HttpApiBuilder.layer(PokedexApi).pipe(
+  HttpApiBuilder.layer(ServerApi).pipe(
     Layer.provide([HealthHandlers, PokedexHandlers]),
+    Layer.provide(SchemaErrorHandlerLayer),
     Layer.provide([Health.layer, DyingPokedex]),
   ),
   DefectBoundary,
