@@ -141,10 +141,11 @@ export class Pokedex extends Context.Service<
   }
 >()('pokedex/Pokedex') {
   /**
-   * Requires a {@link PokemonRepository}, so tests can drive the service with
-   * a fixture store. {@link Pokedex.layer} is the application wiring.
+   * Leaves {@link PokemonRepository} to the caller — the application wiring in
+   * `src/http/AppLayer.ts` uses this one, so the store is chosen at a single
+   * visible level and a test can drive the service with a fixture instead.
    */
-  static readonly layerWithRepository = Layer.effect(
+  static readonly layerNoDeps = Layer.effect(
     Pokedex,
     Effect.gen(function* () {
       const repository = yield* PokemonRepository;
@@ -251,8 +252,13 @@ export class Pokedex extends Context.Service<
     }),
   );
 
-  /** The application wiring: the read side over the in-memory store. */
-  static readonly layer = Pokedex.layerWithRepository.pipe(
+  /**
+   * Convenience wiring over the in-memory store, for a test that wants a
+   * working `Pokedex` and does not care which repository backs it. The
+   * application does **not** use this: baking the repository in here would
+   * hand a second consumer its own `Ref` store without saying so.
+   */
+  static readonly layer = Pokedex.layerNoDeps.pipe(
     Layer.provide(PokemonRepository.layerInMemory),
   );
 }

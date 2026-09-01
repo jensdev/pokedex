@@ -14,7 +14,7 @@ import type {
   PokemonVariant,
 } from '../src/generated/Api.js';
 import { PokedexHandlers } from '../src/http/PokedexHandlers.js';
-import { AllRoutes } from '../src/http/Routes.js';
+import { AppLayer } from '../src/http/AppLayer.js';
 import { SchemaErrorHandlerLayer, ServerApi } from '../src/http/ServerApi.js';
 import { Pokedex } from '../src/services/Pokedex.js';
 
@@ -364,7 +364,7 @@ layer(handlersWith(CorruptUpstreamConfig))(
  * client would refuse to encode in the first place, like an out-of-range id.
  */
 const routesWith = (config: Layer.Layer<never>) =>
-  AllRoutes.pipe(
+  AppLayer.pipe(
     Layer.provide(config),
     Layer.provideMerge(HttpServer.layerServices),
   );

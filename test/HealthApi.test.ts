@@ -8,7 +8,7 @@ import {
 } from 'effect/unstable/http';
 import { HttpApiTest } from 'effect/unstable/httpapi';
 import { HealthHandlers } from '../src/http/HealthHandlers.js';
-import { AllRoutes } from '../src/http/Routes.js';
+import { AppLayer } from '../src/http/AppLayer.js';
 import { SchemaErrorHandlerLayer, ServerApi } from '../src/http/ServerApi.js';
 import { Health } from '../src/services/Health.js';
 
@@ -79,9 +79,7 @@ layer(TestLayer)('Health API', (it) => {
  * the wire status. Drive the real router instead to assert it, along with the
  * OpenAPI and Scalar routes mounted next to the API.
  */
-const RoutesLayer = AllRoutes.pipe(
-  Layer.provideMerge(HttpServer.layerServices),
-);
+const RoutesLayer = AppLayer.pipe(Layer.provideMerge(HttpServer.layerServices));
 
 layer(HttpServer.layerServices)('Health routes', (it) => {
   const get = (path: string) =>

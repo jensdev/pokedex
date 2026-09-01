@@ -25,20 +25,14 @@ import {
   HttpServerRequest,
   HttpServerResponse,
 } from 'effect/unstable/http';
-import { HttpApiBuilder } from 'effect/unstable/httpapi';
 import {
   DEFECT_LOG_MESSAGE,
   DefectBoundary,
   INTERNAL_ERROR,
 } from '../src/http/Defects.js';
-import { HealthHandlers } from '../src/http/HealthHandlers.js';
-import { PokedexHandlers } from '../src/http/PokedexHandlers.js';
+import { AppLayer } from '../src/http/AppLayer.js';
 import { AllRoutes } from '../src/http/Routes.js';
-import {
-  SchemaErrorHandlerLayer,
-  ServerApi,
-  VALIDATION_ERROR_CODE,
-} from '../src/http/ServerApi.js';
+import { VALIDATION_ERROR_CODE } from '../src/http/ServerApi.js';
 import { Health } from '../src/services/Health.js';
 import { Pokedex } from '../src/services/Pokedex.js';
 
@@ -139,13 +133,13 @@ const sendVia = <A, E, R>(routes: Layer.Layer<A, E, R>) =>
   });
 
 /**
- * The real `AllRoutes`, plus one route that dies. Global middleware is
+ * The real {@link AppLayer}, plus one route that dies. Global middleware is
  * registered on the router rather than around a route, so the boundary merged
  * inside `AllRoutes` also wraps a route added by the layer next to it — which
  * is what makes this a test of the production wiring and not of a lookalike.
  */
 const RoutesWithBoom = Layer.mergeAll(
-  AllRoutes,
+  AppLayer,
   HttpRouter.add('GET', '/__boom', Effect.die(BOOM)),
 ).pipe(
   Layer.provide(
@@ -156,7 +150,7 @@ const RoutesWithBoom = Layer.mergeAll(
   Layer.provideMerge(HttpServer.layerServices),
 );
 
-layer(HttpServer.layerServices)('Defect boundary — AllRoutes', (it) => {
+layer(HttpServer.layerServices)('Defect boundary — AppLayer', (it) => {
   it.effect('a dying route answers with the contract ApiError 500', () =>
     Effect.gen(function* () {
       const { value: response, entries } = yield* withCapturedLogs(
@@ -289,11 +283,7 @@ const DyingPokedex = Layer.succeed(Pokedex)(
 );
 
 const DyingRoutes = Layer.mergeAll(
-  HttpApiBuilder.layer(ServerApi).pipe(
-    Layer.provide([HealthHandlers, PokedexHandlers]),
-    Layer.provide(SchemaErrorHandlerLayer),
-    Layer.provide([Health.layer, DyingPokedex]),
-  ),
+  AllRoutes.pipe(Layer.provide([Health.layer, DyingPokedex])),
   DefectBoundary,
 ).pipe(Layer.provideMerge(HttpServer.layerServices));
 
