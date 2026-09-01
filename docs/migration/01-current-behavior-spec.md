@@ -107,3 +107,55 @@ bodies for 500s, and the platform's structured 400 for schema violations.
 | P3 | Non-contract Nest error bodies | **Drop** — be contract-correct (see table above) |
 | P4 | ID sequence starting at 1026 | **Keep** |
 | P5 | Seed data & timestamps | **Keep identical** |
+
+## Open questions (Phase 7)
+
+The rewrite is done and none of the decisions above changed. What follows is what Phase 7
+learned about them while hardening the code — **nothing here has been acted on**, because each
+item is a contract- or behavior-visible change that is a stakeholder call, not a refactor.
+
+### P1 — the 10% flaky upstream
+
+- **The default makes production flaky, not just the tests.** `FLAKY_UPSTREAM_RATE` defaults to
+  `0.1`, so a deployed server fails one `GET /pokemon` in ten by design. The `Config` makes
+  turning it off a deploy-time setting rather than a code change, but the default is the wrong
+  way round for anything real: it should be `0`, with the test suites opting *in*. Flipping the
+  default is a one-line change and is deliberately not made here.
+- **It is the only reachable failure on the read path.** `PokemonDataParse` is the sole typed
+  error `GET /pokemon` can produce; if P1 goes, the endpoint's `ApiError` 500 becomes
+  unreachable from the implementation (a plain defect would still produce one — see
+  `src/http/Defects.ts`). Whoever removes the simulation should decide whether the 500 stays in
+  the contract.
+- **It draws from `Math.random()`, not Effect's `Random` service.** So the only reproducible
+  settings are `0` and `1`; there is no seeded middle. Moving it to `Random` would make a
+  partial rate testable, which is the one thing the current design cannot express.
+- Observability now makes a P1 failure legible end to end: it shows as a failed
+  `PokemonRepository.fetchAll` span under `Pokedex.list`, and as a 500 in the request log line.
+
+### P2 — `encounterRate` resets to 50 on replace
+
+Adding the generated consumer client (`src/generated/Client.ts`) made the consumer-visible
+consequence concrete, and it is worse than "the rate resets":
+
+- **The contract cannot express the fix.** `UpdatePokemonRequest` carries base fields plus
+  `classification` and nothing else — no `encounterRate`, no `evolvesInto`, no
+  `legendaryGroup`. So a consumer doing the obvious read-modify-write (`GET /pokemon/{id}`,
+  change a field, `PUT` it back) **silently loses** `encounterRate` *and* the collection extras
+  (`evolvesInto`, `mascotForGames`), because there is no field on the request to carry them.
+- Preserving the existing rate on normal → normal is therefore not a bug fix in
+  `domain/Pokemon.ts` alone: it is either a `tsp/` change (accept the variant-specific fields
+  on update, which makes `PUT` a true full replace), or a documented decision that `PUT` resets
+  variant extras and consumers must not treat it as read-modify-write. The current code does
+  the latter without saying so anywhere a consumer would look.
+- `legendary`/`mythical` extras *are* carried over when the classification is unchanged, so the
+  behavior is also inconsistent between variants — `normal` is the only one that resets.
+
+### Two items Phase 6 deferred here, both still open
+
+- **`PokemonBaseStats` has no bounds.** `hp: -1` is a valid request and gets stored
+  (`test/PokedexApi.test.ts` pins this). Adding `@minValue(0)` in `tsp/` would turn that into a
+  400 — a wire-visible change to a documented behavior, so it is left to a stakeholder.
+- **A created entry is listable but not addressable.** Generated ids start at 1026 (P4) while
+  `GET /pokemon/{id}` caps `id` at 1025, so `GET /pokemon/{new id}` is a 400. Both halves are
+  parity; together they are a bug from a consumer's point of view. Fixing it means either
+  raising the path-parameter cap or starting the sequence inside 1–1025.

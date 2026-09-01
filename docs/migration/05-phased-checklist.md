@@ -228,17 +228,68 @@ Notes from executing this phase:
   `layer(...)((it) => …)` hands each suite — oxlint's `eslint(no-shadow)` is a hard error, so
   the write suites are `layer(HttpServer.layerServices)(name, (it) => …)` blocks too.
 
-## Phase 7 — Hardening & DX
+## Phase 7 — Hardening & DX ✅
 
-- [ ] Error-channel audit: no `Effect.die` stubs left; defects log but return contract-shaped 500s
-- [ ] Logging/tracing pass: `Effect.fn` span names on service methods,
+- [x] Error-channel audit: no `Effect.die` stubs left; defects log but return contract-shaped 500s
+- [x] Logging/tracing pass: `Effect.fn` span names on service methods,
       `Effect.annotateCurrentSpan` for search/filter params
-- [ ] CI: `npm run generate && git diff --exit-code` (contract drift gate) + `npm run check`
+- [x] CI: `npm run generate && git diff --exit-code` (contract drift gate) + `npm run check`
       (already covers `lint`, `format:check`, `typecheck`, `test`)
-- [ ] `GEMINI.md` / `AGENTS.md` refresh: new commands, architecture pointers to `docs/migration/`
-- [ ] Optional: typed client package via `--format httpclient` for consumers
-- [ ] Optional: revisit parity decisions P1/P2 with stakeholders
-- [ ] Commit
+- [x] `GEMINI.md` / `AGENTS.md` refresh: new commands, architecture pointers to `docs/migration/`
+- [x] `docs/patterns/boundaries.md` rewritten for the Effect layering; `README.md` rewritten
+      as the current-state doc with `docs/migration/` as the design record
+- [x] Optional: typed client package via `--format httpclient` for consumers
+- [x] Optional: revisit parity decisions P1/P2 — written up as
+      [§Open questions](01-current-behavior-spec.md#open-questions-phase-7); no behavior changed
+- [x] Commit
+
+Notes from executing this phase:
+
+- **The audit found no stubs, and two real gaps behind them.** Nothing in `src/` dies any more
+  (the three `Effect.die`s in `test/Pokedex.test.ts` are read-side fixture methods that must
+  never be called, which is exactly what a defect is for). But a defect that *did* happen was
+  answered with `Response.empty({ status: 500 })` — a body the contract does not declare, so a
+  generated client cannot decode it — and it was never logged, because
+  `HttpEffect.toHandled` reports the cause through the installed `ErrorReporter`s and
+  `ErrorReporter.CurrentErrorReporters` defaults to an **empty set**. `src/http/Defects.ts`
+  closes both: the cause goes to the log as the record's `cause`, the client gets the
+  contract's `ApiError`.
+- **A defect is not always a bug, and the first version of the boundary broke every 400.**
+  `HttpApiBuilder` reports a schema violation by `Effect.die`-ing with an `HttpApiSchemaError`,
+  and `HttpServerError.causeResponse` lets a *`Respondable`* defect choose its own response —
+  that is how the 400 happens at all. Catching all defects turned five existing tests from 400
+  to 500. The boundary now skips defects that are `Respondable` or already an
+  `HttpServerResponse`, and `test/Defects.test.ts` pins both directions.
+- **Global middleware wraps routes registered by sibling layers.** `HttpRouter.middleware(fn,
+  { global: true })` adds to the router's middleware set, and `asHttpEffect()` wraps the whole
+  matched-route handler. So merging a test-only dying route alongside the real `AllRoutes` is
+  enough to prove the production wiring, rather than testing a lookalike stack.
+- **`Effect.fn` needs a function; `Health`'s members are effect values.** They carry
+  `Effect.withSpan('Health.check')` etc. instead — same span name, without bending the service
+  interface into zero-argument functions. Piping into `withSpan` costs the generator its
+  contextual type, so `status: 'healthy'` widened to `string` and stopped matching the
+  contract's literal union; `satisfies HealthResponse` on the returned object fixes it.
+- **`Effect.logError(message, cause)` puts a `Cause` argument into the log record's `cause`
+  field**, not into the message — `logWithLevel` splices causes out of the message array. That
+  is what makes "logged with its cause" assertable: a `Logger.make` collector reads
+  `options.cause` directly.
+- **`no-underscore-dangle` fires on `_tag`.** It is Effect's discriminant everywhere, including
+  the generated client's error union, so `.oxlintrc.json` now allows it rather than sprinkling
+  disable comments.
+- **`npm run generate` is byte-stable**, so the CI drift gate is quiet unless something really
+  drifted. `generate:client` is wired into it, which puts the consumer client behind the same
+  gate as the server contract.
+- **The generated client is the only suite that needs a real socket.**
+  `NodeHttpServer.layerTest` serves `AllRoutes` on an ephemeral port and hands back an
+  `HttpClient` pointed at it; a fake transport would prove nothing about two generated
+  artifacts agreeing at the wire. Reads and writes get separate `layer()` blocks so the write
+  tests get their own server and a pristine seed instead of depending on test order.
+- **Adding the client is what made P2 concrete.** `UpdatePokemonRequest` has no field for
+  `encounterRate` or the collection extras, so a consumer's read-modify-write silently loses
+  them — P2 is not fixable in `domain/Pokemon.ts` alone. Written up under
+  [§Open questions](01-current-behavior-spec.md#open-questions-phase-7), along with the two
+  items Phase 6 deferred here (`PokemonBaseStats` bounds, and the created-id/path-cap
+  mismatch). All three are wire-visible changes, so none were made.
 
 ---
 
