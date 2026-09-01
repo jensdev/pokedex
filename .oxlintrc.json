@@ -7,7 +7,8 @@
     "pedantic": "warn"
   },
   "rules": {
-    "typescript/no-floating-promises": "error"
+    "typescript/no-floating-promises": "error",
+    "no-underscore-dangle": ["error", { "allow": ["_tag"] }]
   },
   "env": {
     "builtin": true,
