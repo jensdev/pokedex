@@ -3,6 +3,10 @@
  *
  * All checks are hardcoded — there is nothing to probe yet (behavior spec
  * §Health group). Only `version` and `uptime` are dynamic.
+ *
+ * The three members are effect *values*, not functions, so they carry their
+ * span via `Effect.withSpan` rather than `Effect.fn` — same span name, no
+ * zero-argument functions forced into the service interface to get one.
  */
 import { Clock, Context, DateTime, Effect, Layer } from 'effect';
 import { AppVersion } from '../AppConfig.js';
@@ -27,25 +31,36 @@ export class Health extends Context.Service<
       // Clock so tests can control it; never `Date.now()`.
       const startedAtMillis = yield* Clock.currentTimeMillis;
 
-      const check: Effect.Effect<HealthResponse> = Effect.gen(function* () {
+      // `satisfies` rather than a type annotation on the `const`: piping into
+      // `withSpan` costs the generator its contextual type, and without one
+      // `status: 'healthy'` widens to `string` and stops matching the contract's
+      // literal union.
+      const check = Effect.gen(function* () {
         const checkedAt = DateTime.formatIso(yield* DateTime.now);
         return {
           status: 'healthy',
           checkedAt,
           version,
           components: { database: { status: 'healthy', latencyMs: 1 } },
-        };
-      });
+        } satisfies HealthResponse;
+      }).pipe(Effect.withSpan('Health.check'));
 
-      const liveness: Effect.Effect<LivenessResponse> = Effect.map(
-        Clock.currentTimeMillis,
-        (nowMillis) => ({
-          status: 'ok',
-          uptime: (nowMillis - startedAtMillis) / 1000,
-        }),
+      const liveness = Clock.currentTimeMillis.pipe(
+        Effect.map(
+          (nowMillis) =>
+            ({
+              status: 'ok',
+              uptime: (nowMillis - startedAtMillis) / 1000,
+            }) satisfies LivenessResponse,
+        ),
+        Effect.withSpan('Health.liveness'),
       );
 
-      return { check, liveness, readiness: check };
+      // Same values as `check`, but its own span: a slow readiness probe is
+      // then distinguishable from a slow health check in a trace.
+      const readiness = check.pipe(Effect.withSpan('Health.readiness'));
+
+      return { check, liveness, readiness };
     }),
   );
 }

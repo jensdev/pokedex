@@ -5,6 +5,10 @@
  * sorting (those live in `services/Pokedex.ts`). The adapter is a `Ref`-backed
  * store seeded from `seed.ts`, so all state is lost on restart — parity with
  * the NestJS implementation.
+ *
+ * Every method carries a span, so a trace shows where a request's time went
+ * once the store is something slower than a `Ref`. The methods that take an id
+ * annotate it; `fetchAll` and `nextId` have no arguments worth recording.
  */
 import { Context, Effect, Layer, Option, Ref } from 'effect';
 import { FlakyUpstreamRate } from '../AppConfig.js';
@@ -53,29 +57,38 @@ export class PokemonRepository extends Context.Service<
           const roll = yield* Effect.sync(() => Math.random());
           if (roll < flakyRate) return yield* new PokemonDataParse();
           return yield* Ref.get(store);
+        }).pipe(Effect.withSpan('PokemonRepository.fetchAll')),
+
+        findById: Effect.fn('PokemonRepository.findById')(function* (
+          id: number,
+        ) {
+          yield* Effect.annotateCurrentSpan('pokedex.id', id);
+          const all = yield* Ref.get(store);
+          return Option.fromNullishOr(all.find((pokemon) => pokemon.id === id));
         }),
 
-        findById: (id) =>
-          Ref.get(store).pipe(
-            Effect.map((all) =>
-              Option.fromNullishOr(all.find((pokemon) => pokemon.id === id)),
-            ),
-          ),
+        nextId: Ref.getAndUpdate(idSequence, (n) => n + 1).pipe(
+          Effect.withSpan('PokemonRepository.nextId'),
+        ),
 
-        nextId: Ref.getAndUpdate(idSequence, (n) => n + 1),
-
-        save: (pokemon) =>
-          Ref.update(store, (all) =>
+        save: Effect.fn('PokemonRepository.save')(function* (
+          pokemon: PokemonVariant,
+        ) {
+          yield* Effect.annotateCurrentSpan('pokedex.id', pokemon.id);
+          yield* Ref.update(store, (all) =>
             all.some((entry) => entry.id === pokemon.id)
               ? all.map((entry) => (entry.id === pokemon.id ? pokemon : entry))
               : [...all, pokemon],
-          ),
+          );
+        }),
 
-        remove: (id) =>
-          Ref.modify(store, (all) => {
+        remove: Effect.fn('PokemonRepository.remove')(function* (id: number) {
+          yield* Effect.annotateCurrentSpan('pokedex.id', id);
+          return yield* Ref.modify(store, (all) => {
             const remaining = all.filter((pokemon) => pokemon.id !== id);
             return [remaining.length !== all.length, remaining];
-          }),
+          });
+        }),
       };
     }),
   );
