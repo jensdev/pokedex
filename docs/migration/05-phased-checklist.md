@@ -144,18 +144,44 @@ Notes from executing this phase:
   per test with `Effect.provide(layer, { local: true })` — layers are memoized between
   `provide` calls by default, which would leak one test's store and id sequence into the next.
 
-## Phase 5 — Pokedex read endpoints
+## Phase 5 — Pokedex read endpoints ✅
 
-- [ ] `src/services/Pokedex.ts`: `list` (filter → search → sort → paginate, exact semantics
+- [x] `src/services/Pokedex.ts`: `list` (filter → search → sort → paginate, exact semantics
       from behavior spec §listPokemon) and `getById`
-- [ ] `src/http/PokedexHandlers.ts`: replace stubs for `listPokemon` + `getPokemonById`
+- [x] `src/http/PokedexHandlers.ts`: replace stubs for `listPokemon` + `getPokemonById`
       (error mapping: `PokemonDataParse` → `ApiError` 500, `PokemonNotFound` → empty 404)
-- [ ] Domain tests: each filter, combined filters, sort by each field asc/desc, pagination
+- [x] Domain tests: each filter, combined filters, sort by each field asc/desc, pagination
       edges (`total` counts pre-pagination; page beyond end → empty items)
-- [ ] HTTP tests: list happy path, `?classification=&type=&search=` combinations, 404,
+- [x] HTTP tests: list happy path, `?classification=&type=&search=` combinations, 404,
       out-of-range id → 400
-- [ ] Verify against spec: same requests against old NestJS behavior spec expectations
-- [ ] Commit
+- [x] Verify against spec: same requests against old NestJS behavior spec expectations
+- [x] Commit
+
+Notes from executing this phase:
+
+- **`Pokedex` exports two layers.** [04-implementation-patterns.md](04-implementation-patterns.md#3-domain-service--servicespokedexts)
+  sketches a single `Pokedex.layer` with the repository baked in, which leaves the data set
+  untestable: all four seed Pokémon share `createdAt: 2024-01-01T00:00:00.000Z`, so
+  `sortBy=createdAt` is unobservable over the seed. `Pokedex.layerWithRepository` requires a
+  `PokemonRepository` so `test/Pokedex.test.ts` can drive the service with an eight-entry
+  fixture store; `Pokedex.layer` is that layer plus `PokemonRepository.layerInMemory` and
+  stays the application wiring in `http/Routes.ts`.
+- **`HttpRouter.toHttpEffect` surfaces a rejected request as a failed effect, not a
+  response.** A 400 (out-of-range `id`, `pageSize=0`) fails the handler with a
+  `HttpApiSchemaError`; nothing renders it because response rendering lives one level up. The
+  routes tests therefore run the handler through `Effect.exit` and
+  `HttpServerError.causeResponse` — the same function `HttpEffect.toHandled` calls on the
+  real server, so a `Respondable` failure still picks its own status.
+- **oxlint bans the mutating array methods.** `unicorn(no-array-sort)` and
+  `unicorn(no-array-reverse)` are `correctness` errors, so sorting is `toSorted` (which also
+  removes the defensive copy the pattern sketch needed) and test assertions use `toReversed`.
+- **`Effect.fail(undefined)` trips `unicorn(no-useless-undefined)`.** It is a warning, not an
+  error, but the `undefined` is load-bearing — it selects the `Schema.Void` member of the
+  error union — so it carries a one-line `// oxlint-disable-next-line` above it. The
+  directive must be exactly one line: an `-- explanation` suffix or a wrapped second comment
+  line silently stops oxlint from recognising it.
+- The three write handlers stay `Effect.die` stubs, and the write methods are absent from the
+  `Pokedex` interface rather than stubbed on it — Phase 6 adds both together.
 
 ## Phase 6 — Pokedex write endpoints
 
