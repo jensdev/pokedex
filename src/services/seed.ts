@@ -5,6 +5,12 @@
  * `src/pokemon/infrastructure/pokemon.constants.ts` — parity decision P5 in
  * `docs/migration/01-current-behavior-spec.md`. All four entries share the
  * timestamp `2024-01-01T00:00:00.000Z`.
+ *
+ * All four are real Pokemon, so each carries a `nationalDexNumber`. It equals
+ * the `id` here only because these four were seeded at their Pokedex numbers;
+ * nothing may depend on that, and an entry created through `POST /pokemon`
+ * gets an id of 1026 or above with no number at all unless the caller sends
+ * one.
  */
 import type { PokemonVariant } from '../generated/Api.js';
 
@@ -13,6 +19,7 @@ const SEEDED_AT = '2024-01-01T00:00:00.000Z';
 export const seedPokemon: ReadonlyArray<PokemonVariant> = [
   {
     id: 1,
+    nationalDexNumber: 1,
     name: 'bulbasaur',
     primaryType: 'grass',
     secondaryType: 'poison',
@@ -35,6 +42,7 @@ export const seedPokemon: ReadonlyArray<PokemonVariant> = [
   },
   {
     id: 25,
+    nationalDexNumber: 25,
     name: 'pikachu',
     primaryType: 'electric',
     baseStats: {
@@ -56,6 +64,7 @@ export const seedPokemon: ReadonlyArray<PokemonVariant> = [
   },
   {
     id: 150,
+    nationalDexNumber: 150,
     name: 'mewtwo',
     primaryType: 'psychic',
     baseStats: {
@@ -77,6 +86,7 @@ export const seedPokemon: ReadonlyArray<PokemonVariant> = [
   },
   {
     id: 151,
+    nationalDexNumber: 151,
     name: 'mew',
     primaryType: 'psychic',
     baseStats: {

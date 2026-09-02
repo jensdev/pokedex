@@ -36,7 +36,8 @@ Processing order (each step feeds the next):
 
 - Found → 200 with the variant object.
 - Missing → 404 (Nest `NotFoundException`).
-- `id` outside 1–1025 → rejected by validation (400) before lookup.
+- `id` outside 1–1025 → rejected by validation (400) before lookup. *No longer current: the
+  path parameter is `@minValue(1)` only (D2), so the bound is now just `id >= 1`.*
 
 ### `POST /pokemon` — createPokemon
 
@@ -48,16 +49,18 @@ Processing order (each step feeds the next):
   - `mythical` → `distributionMethod: "Unknown"`, `isCurrentlyDistributed: false`,
     `loreDescription: "A newly discovered Mythical Pokemon."`
 - Returns **201** with the full variant.
-- Value-object guards (negative stats, non-positive height/weight) throw uncaught exceptions
-  → 500. Contract validation catches *some* of these first: `heightMetres` and `weightKg`
-  carry `@minValue(0)`, so a negative one is a 400. **`PokemonBaseStats` carries no bounds**,
-  so `hp: -1` is a valid request — under NestJS it reached the guard and 500'd; the Effect
-  implementation has no guards and stores it. Adding the stat bounds to the contract is a
-  Phase 7 item.
-- Generated ids start at 1026 (P4), while `GET /pokemon/{id}` caps `id` at 1025 — so a
-  created entry appears in `GET /pokemon` but is a 400 on `GET /pokemon/{its id}`. The
-  response model's own `@maxValue(1025)` on `id` was dropped in Phase 6 (it made the 201
-  body unencodable); the path-parameter cap is kept as parity.
+- Value-object guards (negative stats, non-positive height/weight) threw uncaught exceptions
+  → 500 under NestJS. All of these are contract validation now: `heightMetres` and `weightKg`
+  carry `@minValue(0)`, and `PokemonBaseStats` gained `@minValue(0)` on every stat, so a
+  negative one is a **400** before the handler runs. `hp: -1` was a 500 under NestJS and a
+  stored 201 in the first Effect cut, because the migration dropped the guards without
+  replacing them; neither answer was right for a malformed request.
+- Generated ids start at 1026 (P4). `GET /pokemon/{id}` originally capped `id` at 1025, so a
+  created entry appeared in `GET /pokemon` but was a 400 on `GET /pokemon/{its id}`. Both caps
+  are gone now: the response model's `@maxValue(1025)` was dropped in Phase 6 (it made the 201
+  body unencodable), and the path parameter's in the hardening pass (D2). The 1–1025 bound
+  lives on the optional `nationalDexNumber` instead, which is the only field it was ever a
+  fact about.
 
 ### `PUT /pokemon/{id}` — replacePokemon
 
@@ -150,12 +153,17 @@ consequence concrete, and it is worse than "the rate resets":
 - `legendary`/`mythical` extras *are* carried over when the classification is unchanged, so the
   behavior is also inconsistent between variants — `normal` is the only one that resets.
 
-### Two items Phase 6 deferred here, both still open
+### Two items Phase 6 deferred here — both now closed
 
-- **`PokemonBaseStats` has no bounds.** `hp: -1` is a valid request and gets stored
-  (`test/PokedexApi.test.ts` pins this). Adding `@minValue(0)` in `tsp/` would turn that into a
-  400 — a wire-visible change to a documented behavior, so it is left to a stakeholder.
-- **A created entry is listable but not addressable.** Generated ids start at 1026 (P4) while
-  `GET /pokemon/{id}` caps `id` at 1025, so `GET /pokemon/{new id}` is a 400. Both halves are
-  parity; together they are a bug from a consumer's point of view. Fixing it means either
-  raising the path-parameter cap or starting the sequence inside 1–1025.
+- **`PokemonBaseStats` has no bounds — closed.** `hp: -1` used to be a valid request that got
+  stored. Every stat now carries `@minValue(0)` in `tsp/`, so it is a 400 before the handler
+  runs; 0 itself is allowed. This was a wire-visible change to a documented behavior and was
+  taken as a stakeholder decision, not a silent fix. `test/PokedexApi.test.ts` pins both the
+  rejection and the inclusive floor.
+- **A created entry is listable but not addressable — closed.** Generated ids started at 1026
+  (P4) while `GET /pokemon/{id}` capped `id` at 1025, so `GET /pokemon/{new id}` was a 400.
+  The hardening pass dropped the path-parameter cap (decision D2), and the id space was then
+  split in two: `id` is a surrogate key, uncapped and server-allocated, while the optional
+  `nationalDexNumber` carries the real-world number and holds the 1–1025 bound. The cap was
+  never wrong as a fact about Pokémon — it was only wrong as a limit on how many rows this
+  store may hold.

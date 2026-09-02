@@ -1,22 +1,33 @@
 # Effect Pokédex
 
-A **contract-first** Pokédex API built with [TypeSpec](https://typespec.io/),
-[OpenAPI](https://www.openapis.org/), and [Effect 4.0](https://effect.website/).
+A Pokédex HTTP API where the contract comes first and everything else is derived from it.
+The API is written in [TypeSpec](https://typespec.io/), compiled to an
+[OpenAPI 3.0](https://www.openapis.org/) document, and that document generates both the
+[Effect 4.0](https://effect.website/) `HttpApi` the server implements *and* the typed client a
+consumer calls. Implementation, documentation, and consumer are three views of one artifact,
+and CI fails if they stop agreeing.
 
-The API is defined in TypeSpec, compiled to an OpenAPI 3.0 spec, and then used to generate both
-the Effect `HttpApi` contract the server implements *and* a typed client consumers can use —
-so the implementation, the documentation, and the consumer cannot drift from each other.
+There is no web framework beyond Effect itself. Services are `Context.Service` + `Layer`,
+handlers are `HttpApiBuilder` groups, and the server is `NodeHttpServer` over `node:http`.
 
-There is no web framework here beyond Effect itself: services are `Context.Service` +
-`Layer`, handlers are `HttpApiBuilder` groups, and the server is `NodeHttpServer` over
-`node:http`.
+## Quick start
 
-> This repository was rewritten from NestJS 11 to Effect 4.0. The migration is complete;
-> [docs/migration/](./docs/migration/) is kept as the **design record** — what the old
-> implementation did, why the target architecture looks like this, and the phase-by-phase
-> execution log.
+Requires **Node.js ≥ 22** and npm.
 
-## Pipeline
+```sh
+npm ci
+npm run dev            # http://localhost:3000
+```
+
+Then:
+
+- `http://localhost:3000/docs` — interactive [Scalar](https://scalar.com/) reference
+- `http://localhost:3000/openapi.json` — the served spec
+- `curl localhost:3000/pokemon` — four seeded Pokémon (bulbasaur, pikachu, mewtwo, mew)
+
+State lives in a `Ref`, so every restart resets it to the seed.
+
+## The contract pipeline
 
 ```
                                                     ┌─ --format httpapi    ─▶ src/generated/Api.ts     (server)
@@ -24,10 +35,19 @@ tsp/*.tsp ──tsp compile──▶ tsp-output/openapi.yaml ─┤
                                                     └─ --format httpclient ─▶ src/generated/Client.ts  (consumers)
 ```
 
-Everything under `src/generated/` and `tsp-output/` is **emitted, never hand-edited** —
-regenerate with `npm run generate`. CI regenerates and fails the build on any diff.
+`tsp/` is the only thing here written by hand. Everything under `tsp-output/` and
+`src/generated/` is emitted — never edit it. Change an endpoint by changing the TypeSpec, then:
 
-## Request flow
+```sh
+npm run generate       # compile + regenerate api + client
+npm run check          # lint + format + typecheck + test
+```
+
+Commit the regenerated files with the change. CI regenerates from scratch and fails on any
+diff or untracked file, so a hand-edited generated file or a forgotten `npm run generate` is
+caught before review.
+
+## What a request goes through
 
 ```
 node:http
@@ -43,121 +63,152 @@ node:http
               └─ encode the success body, or the selected error member
 ```
 
-Three error channels, deliberately distinct: contract responses are typed failures a handler
-maps to a declared member; schema violations are `Respondable` defects the platform answers
-with 400; anything else is a plain defect, logged with its cause and flattened to one opaque
-`ApiError` 500. See [docs/patterns/boundaries.md](./docs/patterns/boundaries.md).
+### Three error channels, deliberately distinct
 
-## Project structure
+| What went wrong | Who answers | Client sees |
+| --- | --- | --- |
+| A modelled failure — no such Pokémon, upstream data unparseable | the handler, mapping a domain error to a declared member | `ApiError` at the member's status (404, 500) |
+| The request violates the contract | `SchemaErrorHandler` middleware in `src/http/ServerApi.ts` | `ApiError` 400 with `code: "BAD_REQUEST"`, saying which part of the request was wrong and how |
+| Anything unmodelled — a throw, a bug | `DefectBoundary` in `src/http/Defects.ts` | one opaque `ApiError` 500; the cause goes to the log, never the wire |
 
-```
-├── tsp/                    # TypeSpec definitions (the source of truth)
-│   ├── main.tsp            #   Service metadata & imports
-│   ├── health.tsp          #   Health-check endpoints
-│   ├── pokedex.tsp         #   Pokédex CRUD endpoints
-│   └── models/             #   Shared models (Pokemon, pagination, etc.)
-├── tsp-output/
-│   └── openapi.yaml        # Generated OpenAPI 3.0 spec
-├── src/
-│   ├── generated/
-│   │   ├── Api.ts          #   Generated Effect HttpApi contract (DO NOT EDIT)
-│   │   └── Client.ts       #   Generated Effect HttpClient for consumers (DO NOT EDIT)
-│   ├── domain/             #   Pure rules and errors — no HTTP, no clock, no randomness
-│   ├── services/           #   Health, Pokedex, and the storage port + in-memory adapter
-│   ├── http/               #   Handlers, the defect boundary, and route composition
-│   ├── AppConfig.ts        #   Config values (APP_VERSION, FLAKY_UPSTREAM_RATE)
-│   └── main.ts             #   Entry point (server bootstrap)
-├── test/                   # Test suite (@effect/vitest)
-├── docs/
-│   ├── migration/          #   NestJS → Effect design record
-│   └── patterns/           #   Living architecture rules
-├── repos/effect            # Vendored Effect source (upstream `main`, ahead of the pin)
-├── .github/workflows/ci.yml# Contract drift gate + npm run check
-├── tspconfig.yaml          # TypeSpec compiler config
-├── tsconfig.json           # Type-checking config
-├── tsconfig.build.json     # Build config (excludes tests)
-├── vitest.config.ts        # Test config
-├── .oxlintrc.json          # oxlint config
-└── .oxfmtrc.json           # oxfmt config
-```
+The status is chosen by the body, not by the handler: `HttpApiBuilder` encodes a failure
+against a union of the endpoint's declared error members in declaration order, first match
+wins. Three structurally identical `ApiError` members would all collapse onto the first one, so
+`tsp/models/common.tsp` pins `code` to a literal per status (`BAD_REQUEST`,
+`POKEMON_NOT_FOUND`) and TypeScript makes picking the wrong one a compile error.
 
-## Prerequisites
-
-- **Node.js** ≥ 22
-- **npm**
-
-## Commands
-
-| Command                    | What it does                                                                |
-| -------------------------- | --------------------------------------------------------------------------- |
-| `npm ci`                   | Install exactly what the lockfile pins                                      |
-| `npm run generate`         | `typespec:compile` + `generate:api` + `generate:client` — the full pipeline |
-| `npm run typespec:compile` | Compile `tsp/` into `tsp-output/openapi.yaml`                               |
-| `npm run generate:api`     | Generate `src/generated/Api.ts` (server contract)                           |
-| `npm run generate:client`  | Generate `src/generated/Client.ts` (consumer client)                        |
-| `npm run dev`              | Run the server in watch mode (`tsx`) on `PORT` (default `3000`)             |
-| `npm run build`            | Compile to `dist/`                                                          |
-| `npm start`                | Run the compiled server (`node dist/main.js`)                               |
-| `npm run typecheck`        | `tsc --noEmit`                                                              |
-| `npm run lint`             | Lint with `oxlint` (type-aware)                                             |
-| `npm run lint:fix`         | Lint and auto-fix                                                           |
-| `npm run format`           | Format with `oxfmt`                                                         |
-| `npm run format:check`     | Check formatting without writing                                            |
-| `npm test`                 | Run the test suite (`vitest run`)                                           |
-| `npm run check`            | `lint` + `format:check` + `typecheck` + `test` — the gate for every change  |
-
-After changing anything under `tsp/`, run `npm run generate` and commit the regenerated
-`tsp-output/openapi.yaml`, `src/generated/Api.ts`, and `src/generated/Client.ts`.
-
-## Configuration
-
-| Variable              | Default  | What it does                                                                                                                                                       |
-| --------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `PORT`                | `3000`   | Port the HTTP server listens on                                                                                                                                    |
-| `APP_VERSION`         | `1.0.0`  | `version` reported by the health endpoints, and `service.version` on exported telemetry                                                                            |
-| `FLAKY_UPSTREAM_RATE` | `0`      | Opt-in chaos switch: probability that the simulated upstream returns unparseable data, so `GET /pokemon` answers a 500 (parity decision P1). Off unless you set it |
-| `OTLP_URL`            | _unset_  | Base URL of an OTLP collector, e.g. `http://localhost:4318`. Set it and spans go to `/v1/traces` and log records to `/v1/logs`; unset, neither is exported          |
+Failures raised *outside* any route — a response that fails to write — never reach the
+boundary; an `ErrorReporter` in `src/Observability.ts` catches those. Full reasoning in
+[`docs/patterns/boundaries.md`](./docs/patterns/boundaries.md).
 
 ## Endpoints
 
-Interactive reference at `/docs`, machine-readable spec at `/openapi.json`.
+| Method | Path | Behaviour |
+| --- | --- | --- |
+| `GET` | `/health` | Aggregate status + per-component breakdown. Always 200 — read the `status` field |
+| `GET` | `/health/live` | Liveness: `{ status: "ok", uptime }` in seconds |
+| `GET` | `/health/ready` | Same body as `/health`, but **503** when the aggregate is `unhealthy` |
+| `GET` | `/pokemon` | Filter by `classification`, `type` (matches either slot), `search` (case-insensitive substring); `sortBy` × `sortOrder`; `page`/`pageSize` (default `0`/`20`, max `100`) |
+| `POST` | `/pokemon` | 201 with the full variant; server allocates `id`, classification-specific fields are defaulted. Send `nationalDexNumber` only for a real Pokémon |
+| `GET` | `/pokemon/{id}` | 200, or 404 with `POKEMON_NOT_FOUND` echoing the id |
+| `PUT` | `/pokemon/{id}` | Full replace; `id` and `createdAt` are preserved. An omitted `nationalDexNumber` is cleared, as with any other optional field |
+| `DELETE` | `/pokemon/{id}` | 204 empty, or 404 |
 
-| Method   | Path            | Notes                                                       |
-| -------- | --------------- | ----------------------------------------------------------- |
-| `GET`    | `/health`       | Aggregate health with a per-component breakdown             |
-| `GET`    | `/health/live`  | Liveness — uptime in seconds                                |
-| `GET`    | `/health/ready` | Readiness — same shape as `/health`                         |
-| `GET`    | `/pokemon`      | Filter (`classification`, `type`, `search`), sort, paginate |
-| `POST`   | `/pokemon`      | 201 with the full variant; classification-specific defaults |
-| `GET`    | `/pokemon/{id}` | 200 or empty 404; `id` is capped at 1025 by the contract    |
-| `PUT`    | `/pokemon/{id}` | Full replace; preserves `id` and `createdAt`                |
-| `DELETE` | `/pokemon/{id}` | 204 with an empty body, or empty 404                        |
+A Pokémon is a discriminated union on `classification` — `normal`, `legendary`, `mythical` —
+each arm carrying its own fields.
 
-State is in memory and seeded with four Pokémon, so it resets on every restart. The exact
-semantics — including the quirks kept for parity — are specified in
-[docs/migration/01-current-behavior-spec.md](./docs/migration/01-current-behavior-spec.md).
+**Two numbers, deliberately.** `id` is a surrogate key: `≥ 1`, uncapped, allocated by the
+server from `1026` upward, never reused, and unaffected by deletes. `nationalDexNumber` is the
+real-world number and is bounded `1–1025` — Bulbasaur through Pecharunt — because that bound is
+a fact about Pokémon, not a limit on how many rows this store may hold. It is optional
+everywhere: an entry invented through `POST /pokemon` has no National Pokédex number, and the
+server never derives one from `id`. It is a reference, not a key — nothing enforces that two
+entries carry different numbers.
+
+The four seeded entries have `id === nationalDexNumber` because they were seeded at their
+Pokédex numbers. Nothing may depend on that coincidence.
+
+The health aggregate is the *worst* component status, so one unhealthy dependency cannot be
+averaged away by healthy ones. Today the only registered probe is `database` — the repository
+timing its own round trip; adding a `cache` probe is one line in `HealthChecks.layer`.
+
+Exact semantics — including the quirks the endpoints deliberately keep — are specified in
+[`docs/migration/01-current-behavior-spec.md`](./docs/migration/01-current-behavior-spec.md).
+
+## Configuration
+
+| Variable | Default | Effect |
+| --- | --- | --- |
+| `PORT` | `3000` | Port the HTTP server binds |
+| `APP_VERSION` | `1.0.0` | `version` in the health bodies, `service.version` on exported telemetry |
+| `FLAKY_UPSTREAM_RATE` | `0` | Probability the simulated upstream returns unparseable data, making `GET /pokemon` answer 500. Off by default — opt in to exercise the failure path |
+| `OTLP_URL` | _unset_ | Base URL of an OTLP collector, e.g. `http://localhost:4318`. Set it and spans go to `/v1/traces`, log records to `/v1/logs`. Unset exports nothing and the app still boots |
+
+## Observability
+
+Spans and a request log line are produced whether or not anything collects them: services wrap
+their methods in `Effect.withSpan` and annotate the arguments worth querying on
+(`pokedex.filter.type`, `pokedex.id`, and the *effective* page size rather than the one the
+caller happened to send). Setting `OTLP_URL` installs the exporters at the root — below the
+server layer, so the router's own span and log line are exported too. The OTLP support ships
+inside the pinned `effect` package, so this costs no extra dependency.
+
+## Layout
+
+```
+├── tsp/                     # TypeSpec — the source of truth
+│   ├── main.tsp             #   service metadata & imports
+│   ├── health.tsp           #   health endpoints
+│   ├── pokedex.tsp          #   Pokédex CRUD
+│   └── models/              #   Pokemon, pagination, the shared error shapes
+├── tsp-output/openapi.yaml  # generated spec
+├── src/
+│   ├── generated/           # generated Api.ts + Client.ts — DO NOT EDIT
+│   ├── domain/              # pure rules and errors: no HTTP, no clock, no randomness
+│   ├── services/            # Health, HealthChecks, Pokedex, and the storage port + adapter
+│   ├── http/                # handlers, middleware, route composition, and AppLayer
+│   ├── AppConfig.ts         # APP_VERSION, FLAKY_UPSTREAM_RATE
+│   ├── Observability.ts     # OTLP exporters + the error reporter
+│   └── main.ts              # entry point: AppLayer + NodeHttpServer
+├── test/                    # 136 tests over 9 files (@effect/vitest)
+├── docs/
+│   ├── migration/           #   behaviour spec and architecture design record
+│   ├── patterns/            #   living architecture rules
+│   └── plans/               #   executed change plans
+├── repos/effect             # vendored Effect source (upstream main, ahead of the pin)
+└── .github/workflows/ci.yml # contract drift gate + npm run check
+```
+
+Two composition points are worth knowing before you touch the wiring:
+
+- **`src/http/AppLayer.ts` is the composition root.** It is the only place that decides which
+  implementation backs each service, and the reason the health probe and the request handlers
+  share one repository instance instead of quietly getting two. The tests drive this same
+  layer, not a lookalike.
+- **`src/http/ServerApi.ts` is the api the server serves** — the generated contract with the
+  schema-error middleware attached. `HttpApiBuilder.group` bakes an endpoint's middleware in at
+  build time, so a handler group built from the bare generated `PokedexApi` silently loses it.
+  Always build handlers against `ServerApi`.
+
+## Commands
+
+| Command | What it does |
+| --- | --- |
+| `npm ci` | Install exactly what the lockfile pins |
+| `npm run dev` | Server in watch mode (`tsx`) |
+| `npm run generate` | `typespec:compile` + `generate:api` + `generate:client` |
+| `npm run typespec:compile` | `tsp/` → `tsp-output/openapi.yaml` |
+| `npm run generate:api` | → `src/generated/Api.ts` (server contract) |
+| `npm run generate:client` | → `src/generated/Client.ts` (consumer client) |
+| `npm run build` | Compile to `dist/` |
+| `npm start` | Run the compiled server |
+| `npm test` | `vitest run` |
+| `npm run typecheck` | `tsc --noEmit` |
+| `npm run lint` / `lint:fix` | Type-aware `oxlint` |
+| `npm run format` / `format:check` | `oxfmt` |
+| `npm run check` | lint + format:check + typecheck + test — the gate for every change |
 
 ## Stack
 
-| Library                                                                       | Purpose                                                  |
-| ----------------------------------------------------------------------------- | -------------------------------------------------------- |
-| [`effect`](https://effect.website/)                                           | Runtime, effect system, `Schema`, `Layer`, and `HttpApi` |
-| [`@effect/platform-node`](https://effect.website/docs/platform/introduction/) | Node HTTP server platform layer                          |
-| [`@typespec/compiler`](https://typespec.io/)                                  | API-first contract definition language                   |
-| [`@effect/openapi-generator`](https://github.com/Effect-TS/effect)            | Generates the Effect contract and client from OpenAPI    |
-| [`@effect/vitest`](https://github.com/Effect-TS/effect)                       | Effect-aware test helpers on top of `vitest`             |
-| [`oxlint` / `oxfmt`](https://oxc.rs/)                                         | Linting and formatting (replaces eslint + prettier)      |
+| Library | Role |
+| --- | --- |
+| [`effect`](https://effect.website/) | Runtime, effect system, `Schema`, `Layer`, `HttpApi`, OTLP |
+| [`@effect/platform-node`](https://effect.website/docs/platform/introduction/) | Node HTTP server platform layer |
+| [`@typespec/compiler`](https://typespec.io/) | Contract definition language |
+| [`@effect/openapi-generator`](https://github.com/Effect-TS/effect) | OpenAPI → Effect contract and client |
+| [`@effect/vitest`](https://github.com/Effect-TS/effect) | Effect-aware test helpers |
+| [`oxlint` / `oxfmt`](https://oxc.rs/) | Linting and formatting, in place of eslint + prettier |
 
-All `effect` packages are **pinned to an exact version** (`4.0.0-rc.112`). Verify Effect APIs
-against the installed source (`node_modules/effect/src` and the `src/` each `@effect/*` package
-ships) — the vendored `repos/effect` subtree tracks upstream `main` and has drifted ahead of
-the pin. Bump the pins and the subtree together, then rerun `npm run generate && npm run check`.
+Every `effect` package is pinned to an exact version (`4.0.0-rc.112`). Check APIs against the
+installed source (`node_modules/effect/src`, and the `src/` each `@effect/*` package ships) —
+the vendored `repos/effect` subtree tracks upstream `main` and has drifted ahead of the pin.
+Bump the pins and the subtree together, then rerun `npm run generate && npm run check`.
 
-## Agent instructions
+## Working on this repo
 
-This repository is optimized for AI agents (Gemini, Claude, etc.).
-See [AGENTS.md](./AGENTS.md) — [GEMINI.md](./GEMINI.md) is a symlink to it — for architectural
-conventions, rules, and the gotchas worth knowing before touching anything.
+[AGENTS.md](./AGENTS.md) — with [GEMINI.md](./GEMINI.md) symlinked to it — holds the
+conventions, the boundary rules, and the gotchas. It is written for AI agents and is just as
+useful to a human arriving cold. Read it before changing anything under `src/`.
 
 ## License
 

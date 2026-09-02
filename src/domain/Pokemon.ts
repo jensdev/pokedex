@@ -99,11 +99,21 @@ const replacedExtras = {
 } as const;
 
 /**
- * The fields shared by every variant. `secondaryType` is omitted rather than
- * set to `undefined` so the result matches the contract's optional key exactly.
+ * The fields shared by every variant. The optional keys are omitted rather
+ * than set to `undefined` so the result matches the contract's optional keys
+ * exactly.
+ *
+ * `nationalDexNumber` comes from the payload and only from the payload: it is
+ * a claim about the real world that only the caller can make, and deriving it
+ * from `id` would be wrong for every entry above 1025 and a coincidence below.
+ * A replace that omits it therefore clears it, which is what a full replace
+ * means — the same rule `secondaryType` follows.
  */
 const baseOf = (input: PokemonInput, stamp: VariantStamp) => ({
   id: stamp.id,
+  ...(input.nationalDexNumber === undefined
+    ? {}
+    : { nationalDexNumber: input.nationalDexNumber }),
   name: input.name,
   primaryType: input.primaryType,
   ...(input.secondaryType === undefined

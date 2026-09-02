@@ -671,15 +671,14 @@ layer(HttpServer.layerServices)('Pokedex routes', (it) => {
       }),
   );
 
-  it.effect('POST /pokemon accepts a negative base stat — a contract gap', () =>
+  it.effect('POST /pokemon rejects a negative base stat as 400', () =>
     Effect.gen(function* () {
       const send = yield* sessionVia(routes);
 
-      // `PokemonBaseStats` carries no `@minValue`, so `hp: -1` is a valid
-      // request as far as the contract is concerned. The behavior spec assumed
-      // otherwise (§createPokemon, "Zod/contract validation (min 0) rejects
-      // first"); this pins what the contract actually does until the stat
-      // bounds are added in Phase 7.
+      // `PokemonBaseStats` now carries `@minValue(0)` on every stat. Under
+      // NestJS a negative stat reached a value-object guard and threw, so this
+      // was a 500; the migration dropped the guards and stored it as a 201.
+      // Neither is right for a malformed request — the contract rejects it now.
       const response = yield* send(
         jsonPost('/pokemon', {
           ...payload('normal'),
@@ -687,8 +686,91 @@ layer(HttpServer.layerServices)('Pokedex routes', (it) => {
         }),
       );
 
+      assert.strictEqual(response.status, 400);
+      assert.include(yield* bodyOf(response), '"code":"BAD_REQUEST"');
+    }),
+  );
+
+  it.effect('POST /pokemon accepts a zero base stat', () =>
+    Effect.gen(function* () {
+      const send = yield* sessionVia(routes);
+
+      // The bound is inclusive: 0 is the floor, not a rejected value.
+      const response = yield* send(
+        jsonPost('/pokemon', {
+          ...payload('normal'),
+          baseStats: { ...payload('normal').baseStats, hp: 0 },
+        }),
+      );
+
       assert.strictEqual(response.status, 201);
     }),
+  );
+
+  it.effect(
+    'POST /pokemon accepts a nationalDexNumber and echoes it back',
+    () =>
+      Effect.gen(function* () {
+        const send = yield* sessionVia(routes);
+
+        // 1025 is Pecharunt, the last National Pokedex entry — the boundary the
+        // contract allows.
+        const response = yield* send(
+          jsonPost('/pokemon', {
+            ...payload('normal'),
+            nationalDexNumber: 1025,
+          }),
+        );
+
+        assert.strictEqual(response.status, 201);
+        // The two numbers are independent: the surrogate id still comes from
+        // the sequence, and the dex number is the one the caller claimed.
+        assert.deepStrictEqual(parseJson(yield* bodyOf(response)), {
+          ...payload('normal'),
+          nationalDexNumber: 1025,
+          id: 1026,
+          createdAt: EPOCH,
+          updatedAt: EPOCH,
+          encounterRate: 50,
+        });
+      }),
+  );
+
+  it.effect('POST /pokemon with a nationalDexNumber above 1025 is a 400', () =>
+    Effect.gen(function* () {
+      const send = yield* sessionVia(routes);
+
+      // The cap that used to sit on the path parameter lives here now, where
+      // it is a fact about Pokemon rather than a limit on the store: there is
+      // no Pokemon number 1026, though there is very much an entry with id
+      // 1026.
+      const response = yield* send(
+        jsonPost('/pokemon', { ...payload('normal'), nationalDexNumber: 1026 }),
+      );
+
+      assert.strictEqual(response.status, 400);
+      assert.include(yield* bodyOf(response), '"code":"BAD_REQUEST"');
+    }),
+  );
+
+  it.effect(
+    'a created entry has an id past 1025 and no nationalDexNumber',
+    () =>
+      Effect.gen(function* () {
+        const send = yield* sessionVia(routes);
+
+        yield* send(jsonPost('/pokemon', payload('normal')));
+        const fetched = yield* send(HttpClientRequest.get('/pokemon/1026'));
+        const seeded = yield* send(HttpClientRequest.get('/pokemon/25'));
+
+        // The invented one is addressable and carries no claim about the real
+        // world; the seeded one carries pikachu's number.
+        assert.strictEqual(fetched.status, 200);
+        const createdBody = yield* bodyOf(fetched);
+        assert.include(createdBody, '"id":1026');
+        assert.notInclude(createdBody, 'nationalDexNumber');
+        assert.include(yield* bodyOf(seeded), '"nationalDexNumber":25');
+      }),
   );
 
   it.effect('POST /pokemon with an over-long name is rejected as 400', () =>

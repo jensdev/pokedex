@@ -91,6 +91,15 @@ describe('makeVariant', () => {
 
     assert.isFalse('secondaryType' in makeVariant(input('normal'), stamp));
   });
+
+  it('carries nationalDexNumber through, and omits the key when absent', () => {
+    const real = makeVariant(input('normal', { nationalDexNumber: 25 }), stamp);
+    assert.strictEqual(real.nationalDexNumber, 25);
+
+    // An invented Pokemon has no National Pokedex number, and `id` is never
+    // used as a stand-in — 1026 is not a Pokemon.
+    assert.isFalse('nationalDexNumber' in makeVariant(input('normal'), stamp));
+  });
 });
 
 describe('replaceVariant', () => {
@@ -134,6 +143,28 @@ describe('replaceVariant', () => {
       weightKg: 8,
       isObtainable: false,
     });
+
+  it('takes nationalDexNumber from the payload, and clears it when omitted', () => {
+    const numbered: PokemonVariant = {
+      ...existingNormal,
+      nationalDexNumber: 6,
+    };
+
+    const renumbered = replaceVariant(
+      numbered,
+      input('normal', { nationalDexNumber: 9 }),
+      UPDATED,
+    );
+    assert.strictEqual(renumbered.nationalDexNumber, 9);
+
+    // A replace is a full replace: an omitted number is a removed number, the
+    // same rule `secondaryType` follows. Preserving it would make this the one
+    // field a client cannot clear.
+    assert.isFalse(
+      'nationalDexNumber' in
+        replaceVariant(numbered, payload('normal'), UPDATED),
+    );
+  });
 
   it('preserves id and createdAt and stamps the new updatedAt', () => {
     const result = replaceVariant(existingNormal, payload('normal'), UPDATED);

@@ -101,6 +101,36 @@ export const PokemonType = Schema.Literals([
   description: 'Pokemon elemental type.',
   identifier: 'PokemonType',
 });
+export type PokemonId = number;
+export const PokemonId = Schema.Number.annotate({
+  description:
+    'Identifies an entry in this Pokédex. Unique; allocated by the server.',
+  format: 'int32',
+})
+  .check(Schema.isInt().annotate({ expected: 'an integer' }))
+  .check(
+    Schema.isGreaterThanOrEqualTo(1).annotate({
+      expected: 'a value greater than or equal to 1',
+      identifier: 'PokemonId',
+    }),
+  );
+export type NationalDexNumber = number;
+export const NationalDexNumber = Schema.Number.annotate({
+  description: 'National Pokédex number — 1 for Bulbasaur, 1025 for Pecharunt.',
+  format: 'int32',
+})
+  .check(Schema.isInt().annotate({ expected: 'an integer' }))
+  .check(
+    Schema.isGreaterThanOrEqualTo(1).annotate({
+      expected: 'a value greater than or equal to 1',
+    }),
+  )
+  .check(
+    Schema.isLessThanOrEqualTo(1025).annotate({
+      expected: 'a value less than or equal to 1025',
+      identifier: 'NationalDexNumber',
+    }),
+  );
 export type PokemonBaseStats = {
   readonly hp: number;
   readonly attack: number;
@@ -110,24 +140,48 @@ export type PokemonBaseStats = {
   readonly speed: number;
 };
 export const PokemonBaseStats = Schema.Struct({
-  hp: Schema.Number.annotate({ format: 'int32' }).check(
-    Schema.isInt().annotate({ expected: 'an integer' }),
-  ),
-  attack: Schema.Number.annotate({ format: 'int32' }).check(
-    Schema.isInt().annotate({ expected: 'an integer' }),
-  ),
-  defense: Schema.Number.annotate({ format: 'int32' }).check(
-    Schema.isInt().annotate({ expected: 'an integer' }),
-  ),
-  specialAttack: Schema.Number.annotate({ format: 'int32' }).check(
-    Schema.isInt().annotate({ expected: 'an integer' }),
-  ),
-  specialDefense: Schema.Number.annotate({ format: 'int32' }).check(
-    Schema.isInt().annotate({ expected: 'an integer' }),
-  ),
-  speed: Schema.Number.annotate({ format: 'int32' }).check(
-    Schema.isInt().annotate({ expected: 'an integer' }),
-  ),
+  hp: Schema.Number.annotate({ format: 'int32' })
+    .check(Schema.isInt().annotate({ expected: 'an integer' }))
+    .check(
+      Schema.isGreaterThanOrEqualTo(0).annotate({
+        expected: 'a value greater than or equal to 0',
+      }),
+    ),
+  attack: Schema.Number.annotate({ format: 'int32' })
+    .check(Schema.isInt().annotate({ expected: 'an integer' }))
+    .check(
+      Schema.isGreaterThanOrEqualTo(0).annotate({
+        expected: 'a value greater than or equal to 0',
+      }),
+    ),
+  defense: Schema.Number.annotate({ format: 'int32' })
+    .check(Schema.isInt().annotate({ expected: 'an integer' }))
+    .check(
+      Schema.isGreaterThanOrEqualTo(0).annotate({
+        expected: 'a value greater than or equal to 0',
+      }),
+    ),
+  specialAttack: Schema.Number.annotate({ format: 'int32' })
+    .check(Schema.isInt().annotate({ expected: 'an integer' }))
+    .check(
+      Schema.isGreaterThanOrEqualTo(0).annotate({
+        expected: 'a value greater than or equal to 0',
+      }),
+    ),
+  specialDefense: Schema.Number.annotate({ format: 'int32' })
+    .check(Schema.isInt().annotate({ expected: 'an integer' }))
+    .check(
+      Schema.isGreaterThanOrEqualTo(0).annotate({
+        expected: 'a value greater than or equal to 0',
+      }),
+    ),
+  speed: Schema.Number.annotate({ format: 'int32' })
+    .check(Schema.isInt().annotate({ expected: 'an integer' }))
+    .check(
+      Schema.isGreaterThanOrEqualTo(0).annotate({
+        expected: 'a value greater than or equal to 0',
+      }),
+    ),
 }).annotate({
   description: 'Six base stats shared by every Pokemon.',
   identifier: 'PokemonBaseStats',
@@ -151,7 +205,8 @@ export const ComponentHealth = Schema.Struct({
   identifier: 'ComponentHealth',
 });
 export type NormalPokemon = {
-  readonly id: number;
+  readonly id: PokemonId;
+  readonly nationalDexNumber?: NationalDexNumber;
   readonly name: string;
   readonly primaryType: PokemonType;
   readonly secondaryType?: PokemonType;
@@ -166,17 +221,18 @@ export type NormalPokemon = {
   readonly evolvesInto?: ReadonlyArray<number>;
 };
 export const NormalPokemon = Schema.Struct({
-  id: Schema.Number.annotate({
+  id: Schema.suspend((): Schema.Codec<PokemonId> => PokemonId).annotate({
     description:
-      'National Pokedex number (e.g. 1 for Bulbasaur), or a generated id.',
-    format: 'int32',
-  })
-    .check(Schema.isInt().annotate({ expected: 'an integer' }))
-    .check(
-      Schema.isGreaterThanOrEqualTo(1).annotate({
-        expected: 'a value greater than or equal to 1',
-      }),
-    ),
+      'Identifies this entry. Unique; allocated by the server on create.',
+  }),
+  nationalDexNumber: Schema.optionalKey(
+    Schema.suspend(
+      (): Schema.Codec<NationalDexNumber> => NationalDexNumber,
+    ).annotate({
+      description:
+        'National Pokedex number, when this entry is a real Pokemon. Absent for\nentries invented through `POST /pokemon`.',
+    }),
+  ),
   name: Schema.String.annotate({
     description: 'Species name in lowercase (e.g. "bulbasaur").',
   })
@@ -266,7 +322,8 @@ export const NormalPokemon = Schema.Struct({
   identifier: 'NormalPokemon',
 });
 export type LegendaryPokemon = {
-  readonly id: number;
+  readonly id: PokemonId;
+  readonly nationalDexNumber?: NationalDexNumber;
   readonly name: string;
   readonly primaryType: PokemonType;
   readonly secondaryType?: PokemonType;
@@ -282,17 +339,18 @@ export type LegendaryPokemon = {
   readonly mascotForGames?: ReadonlyArray<string>;
 };
 export const LegendaryPokemon = Schema.Struct({
-  id: Schema.Number.annotate({
+  id: Schema.suspend((): Schema.Codec<PokemonId> => PokemonId).annotate({
     description:
-      'National Pokedex number (e.g. 1 for Bulbasaur), or a generated id.',
-    format: 'int32',
-  })
-    .check(Schema.isInt().annotate({ expected: 'an integer' }))
-    .check(
-      Schema.isGreaterThanOrEqualTo(1).annotate({
-        expected: 'a value greater than or equal to 1',
-      }),
-    ),
+      'Identifies this entry. Unique; allocated by the server on create.',
+  }),
+  nationalDexNumber: Schema.optionalKey(
+    Schema.suspend(
+      (): Schema.Codec<NationalDexNumber> => NationalDexNumber,
+    ).annotate({
+      description:
+        'National Pokedex number, when this entry is a real Pokemon. Absent for\nentries invented through `POST /pokemon`.',
+    }),
+  ),
   name: Schema.String.annotate({
     description: 'Species name in lowercase (e.g. "bulbasaur").',
   })
@@ -372,7 +430,8 @@ export const LegendaryPokemon = Schema.Struct({
   identifier: 'LegendaryPokemon',
 });
 export type MythicalPokemon = {
-  readonly id: number;
+  readonly id: PokemonId;
+  readonly nationalDexNumber?: NationalDexNumber;
   readonly name: string;
   readonly primaryType: PokemonType;
   readonly secondaryType?: PokemonType;
@@ -388,17 +447,18 @@ export type MythicalPokemon = {
   readonly loreDescription: string;
 };
 export const MythicalPokemon = Schema.Struct({
-  id: Schema.Number.annotate({
+  id: Schema.suspend((): Schema.Codec<PokemonId> => PokemonId).annotate({
     description:
-      'National Pokedex number (e.g. 1 for Bulbasaur), or a generated id.',
-    format: 'int32',
-  })
-    .check(Schema.isInt().annotate({ expected: 'an integer' }))
-    .check(
-      Schema.isGreaterThanOrEqualTo(1).annotate({
-        expected: 'a value greater than or equal to 1',
-      }),
-    ),
+      'Identifies this entry. Unique; allocated by the server on create.',
+  }),
+  nationalDexNumber: Schema.optionalKey(
+    Schema.suspend(
+      (): Schema.Codec<NationalDexNumber> => NationalDexNumber,
+    ).annotate({
+      description:
+        'National Pokedex number, when this entry is a real Pokemon. Absent for\nentries invented through `POST /pokemon`.',
+    }),
+  ),
   name: Schema.String.annotate({
     description: 'Species name in lowercase (e.g. "bulbasaur").',
   })
@@ -474,6 +534,7 @@ export const MythicalPokemon = Schema.Struct({
   identifier: 'MythicalPokemon',
 });
 export type CreatePokemonRequest = {
+  readonly nationalDexNumber?: NationalDexNumber;
   readonly name: string;
   readonly primaryType: PokemonType;
   readonly secondaryType?: PokemonType;
@@ -484,6 +545,14 @@ export type CreatePokemonRequest = {
   readonly classification: PokemonClassification;
 };
 export const CreatePokemonRequest = Schema.Struct({
+  nationalDexNumber: Schema.optionalKey(
+    Schema.suspend(
+      (): Schema.Codec<NationalDexNumber> => NationalDexNumber,
+    ).annotate({
+      description:
+        'National Pokedex number, if this is a real Pokemon. Omit it for an\ninvented one — the server never derives it from `id`.',
+    }),
+  ),
   name: Schema.String.check(
     Schema.isMinLength(1).annotate({
       expected: 'a value with a length of at least 1',
@@ -517,6 +586,7 @@ export const CreatePokemonRequest = Schema.Struct({
   identifier: 'CreatePokemonRequest',
 });
 export type UpdatePokemonRequest = {
+  readonly nationalDexNumber?: NationalDexNumber;
   readonly name: string;
   readonly primaryType: PokemonType;
   readonly secondaryType?: PokemonType;
@@ -527,6 +597,14 @@ export type UpdatePokemonRequest = {
   readonly classification: PokemonClassification;
 };
 export const UpdatePokemonRequest = Schema.Struct({
+  nationalDexNumber: Schema.optionalKey(
+    Schema.suspend(
+      (): Schema.Codec<NationalDexNumber> => NationalDexNumber,
+    ).annotate({
+      description:
+        'National Pokedex number, if this is a real Pokemon. Omit it for an\ninvented one — the server never derives it from `id`.',
+    }),
+  ),
   name: Schema.String.check(
     Schema.isMinLength(1).annotate({
       expected: 'a value with a length of at least 1',

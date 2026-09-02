@@ -629,6 +629,12 @@ components:
         - isObtainable
         - classification
       properties:
+        nationalDexNumber:
+          allOf:
+            - $ref: '#/components/schemas/NationalDexNumber'
+          description: |-
+            National Pokedex number, if this is a real Pokemon. Omit it for an
+            invented one — the server never derives it from `id`.
         name:
           type: string
           minLength: 1
@@ -708,10 +714,15 @@ components:
         - isBoxLegendary
       properties:
         id:
-          type: integer
-          format: int32
-          minimum: 1
-          description: National Pokedex number (e.g. 1 for Bulbasaur), or a generated id.
+          allOf:
+            - $ref: '#/components/schemas/PokemonId'
+          description: Identifies this entry. Unique; allocated by the server on create.
+        nationalDexNumber:
+          allOf:
+            - $ref: '#/components/schemas/NationalDexNumber'
+          description: |-
+            National Pokedex number, when this entry is a real Pokemon. Absent for
+            entries invented through `POST /pokemon`.
         name:
           type: string
           minLength: 1
@@ -802,10 +813,15 @@ components:
         - loreDescription
       properties:
         id:
-          type: integer
-          format: int32
-          minimum: 1
-          description: National Pokedex number (e.g. 1 for Bulbasaur), or a generated id.
+          allOf:
+            - $ref: '#/components/schemas/PokemonId'
+          description: Identifies this entry. Unique; allocated by the server on create.
+        nationalDexNumber:
+          allOf:
+            - $ref: '#/components/schemas/NationalDexNumber'
+          description: |-
+            National Pokedex number, when this entry is a real Pokemon. Absent for
+            entries invented through `POST /pokemon`.
         name:
           type: string
           minLength: 1
@@ -861,6 +877,12 @@ components:
       description: |-
         A Mythical Pokemon — event-only distribution, outside the normal story,
         typically cannot be caught in the wild.
+    NationalDexNumber:
+      type: integer
+      format: int32
+      minimum: 1
+      maximum: 1025
+      description: National Pokédex number — 1 for Bulbasaur, 1025 for Pecharunt.
     NormalPokemon:
       type: object
       required:
@@ -877,10 +899,15 @@ components:
         - encounterRate
       properties:
         id:
-          type: integer
-          format: int32
-          minimum: 1
-          description: National Pokedex number (e.g. 1 for Bulbasaur), or a generated id.
+          allOf:
+            - $ref: '#/components/schemas/PokemonId'
+          description: Identifies this entry. Unique; allocated by the server on create.
+        nationalDexNumber:
+          allOf:
+            - $ref: '#/components/schemas/NationalDexNumber'
+          description: |-
+            National Pokedex number, when this entry is a real Pokemon. Absent for
+            entries invented through `POST /pokemon`.
         name:
           type: string
           minLength: 1
@@ -950,21 +977,27 @@ components:
         hp:
           type: integer
           format: int32
+          minimum: 0
         attack:
           type: integer
           format: int32
+          minimum: 0
         defense:
           type: integer
           format: int32
+          minimum: 0
         specialAttack:
           type: integer
           format: int32
+          minimum: 0
         specialDefense:
           type: integer
           format: int32
+          minimum: 0
         speed:
           type: integer
           format: int32
+          minimum: 0
       description: Six base stats shared by every Pokemon.
     PokemonClassification:
       type: string
@@ -977,7 +1010,7 @@ components:
       type: integer
       format: int32
       minimum: 1
-      description: A National Pokédex number, or a generated id.
+      description: Identifies an entry in this Pokédex. Unique; allocated by the server.
     PokemonType:
       type: string
       enum:
@@ -1020,6 +1053,12 @@ components:
         - isObtainable
         - classification
       properties:
+        nationalDexNumber:
+          allOf:
+            - $ref: '#/components/schemas/NationalDexNumber'
+          description: |-
+            National Pokedex number, if this is a real Pokemon. Omit it for an
+            invented one — the server never derives it from `id`.
         name:
           type: string
           minLength: 1

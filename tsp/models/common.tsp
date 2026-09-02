@@ -44,12 +44,29 @@ model CodedApiError<Code extends string> {
   details?: Record<string>;
 }
 
-// Deliberately uncapped (decision D2 in the hardening plan): entries created
-// through `POST /pokemon` get ids from `FIRST_GENERATED_ID = 1026` upwards, so
-// a `@maxValue(1025)` on the path parameter would make them unaddressable.
-/** A National Pokédex number, or a generated id. */
+// The id is a surrogate key and is deliberately uncapped (decision D2): it
+// identifies a row in *this* Pokédex, not a Pokémon in the National Pokédex.
+// Entries created through `POST /pokemon` get ids from
+// `FIRST_GENERATED_ID = 1026` upwards, so a cap here would make them
+// unaddressable — which is what the original `@maxValue(1025)` did.
+//
+// The real-world number lives in `nationalDexNumber` instead, where 1025 is a
+// fact about Pokémon rather than a limit on how many rows this store may hold.
+/** Identifies an entry in this Pokédex. Unique; allocated by the server. */
 @minValue(1)
 scalar PokemonId extends int32;
+
+// 1025 is the number of Pokémon in the National Pokédex (Bulbasaur through
+// Pecharunt), so the bound is a domain fact and belongs on this field alone.
+//
+// Optional wherever it appears: an entry invented through `POST /pokemon` has
+// no National Pokédex number, and making one up for it would be a lie. Two
+// entries may also carry the same number — a regional form and its base
+// species, say — so this is a reference, never a key. `id` is the key.
+/** National Pokédex number — 1 for Bulbasaur, 1025 for Pecharunt. */
+@minValue(1)
+@maxValue(1025)
+scalar NationalDexNumber extends int32;
 
 // The body is served by the schema-error middleware in `src/http/ServerApi.ts`,
 // not by a handler — declaring it here is what makes contract, server, and

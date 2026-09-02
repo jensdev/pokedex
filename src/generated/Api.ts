@@ -182,6 +182,7 @@ export const PokemonType = Schema.Literals([
 export type PokemonVariant =
   | {
       readonly id: number;
+      readonly nationalDexNumber?: number;
       readonly name: string;
       readonly primaryType:
         | 'bug'
@@ -240,6 +241,7 @@ export type PokemonVariant =
     }
   | {
       readonly id: number;
+      readonly nationalDexNumber?: number;
       readonly name: string;
       readonly primaryType:
         | 'bug'
@@ -299,6 +301,7 @@ export type PokemonVariant =
     }
   | {
       readonly id: number;
+      readonly nationalDexNumber?: number;
       readonly name: string;
       readonly primaryType:
         | 'bug'
@@ -360,7 +363,7 @@ export const PokemonVariant = Schema.Union([
   Schema.Struct({
     id: Schema.Number.annotate({
       description:
-        'National Pokedex number (e.g. 1 for Bulbasaur), or a generated id.',
+        'Identifies an entry in this Pokédex. Unique; allocated by the server.',
       format: 'int32',
     })
       .check(Schema.isInt().annotate({ expected: 'an integer' }))
@@ -369,6 +372,24 @@ export const PokemonVariant = Schema.Union([
           expected: 'a value greater than or equal to 1',
         }),
       ),
+    nationalDexNumber: Schema.optionalKey(
+      Schema.Number.annotate({
+        description:
+          'National Pokédex number — 1 for Bulbasaur, 1025 for Pecharunt.',
+        format: 'int32',
+      })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(1).annotate({
+            expected: 'a value greater than or equal to 1',
+          }),
+        )
+        .check(
+          Schema.isLessThanOrEqualTo(1025).annotate({
+            expected: 'a value less than or equal to 1025',
+          }),
+        ),
+    ),
     name: Schema.String.annotate({
       description: 'Species name in lowercase (e.g. "bulbasaur").',
     })
@@ -425,24 +446,48 @@ export const PokemonVariant = Schema.Union([
       ]).annotate({ description: 'Pokemon elemental type.' }),
     ),
     baseStats: Schema.Struct({
-      hp: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      attack: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      defense: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      specialAttack: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      specialDefense: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      speed: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
+      hp: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      attack: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      defense: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      specialAttack: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      specialDefense: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      speed: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
     }).annotate({ description: 'Six base stats shared by every Pokemon.' }),
     heightMetres: Schema.Number.annotate({
       description: 'Height in metres.',
@@ -511,7 +556,7 @@ export const PokemonVariant = Schema.Union([
   Schema.Struct({
     id: Schema.Number.annotate({
       description:
-        'National Pokedex number (e.g. 1 for Bulbasaur), or a generated id.',
+        'Identifies an entry in this Pokédex. Unique; allocated by the server.',
       format: 'int32',
     })
       .check(Schema.isInt().annotate({ expected: 'an integer' }))
@@ -520,6 +565,24 @@ export const PokemonVariant = Schema.Union([
           expected: 'a value greater than or equal to 1',
         }),
       ),
+    nationalDexNumber: Schema.optionalKey(
+      Schema.Number.annotate({
+        description:
+          'National Pokédex number — 1 for Bulbasaur, 1025 for Pecharunt.',
+        format: 'int32',
+      })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(1).annotate({
+            expected: 'a value greater than or equal to 1',
+          }),
+        )
+        .check(
+          Schema.isLessThanOrEqualTo(1025).annotate({
+            expected: 'a value less than or equal to 1025',
+          }),
+        ),
+    ),
     name: Schema.String.annotate({
       description: 'Species name in lowercase (e.g. "bulbasaur").',
     })
@@ -576,24 +639,48 @@ export const PokemonVariant = Schema.Union([
       ]).annotate({ description: 'Pokemon elemental type.' }),
     ),
     baseStats: Schema.Struct({
-      hp: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      attack: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      defense: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      specialAttack: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      specialDefense: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      speed: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
+      hp: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      attack: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      defense: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      specialAttack: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      specialDefense: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      speed: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
     }).annotate({ description: 'Six base stats shared by every Pokemon.' }),
     heightMetres: Schema.Number.annotate({
       description: 'Height in metres.',
@@ -651,7 +738,7 @@ export const PokemonVariant = Schema.Union([
   Schema.Struct({
     id: Schema.Number.annotate({
       description:
-        'National Pokedex number (e.g. 1 for Bulbasaur), or a generated id.',
+        'Identifies an entry in this Pokédex. Unique; allocated by the server.',
       format: 'int32',
     })
       .check(Schema.isInt().annotate({ expected: 'an integer' }))
@@ -660,6 +747,24 @@ export const PokemonVariant = Schema.Union([
           expected: 'a value greater than or equal to 1',
         }),
       ),
+    nationalDexNumber: Schema.optionalKey(
+      Schema.Number.annotate({
+        description:
+          'National Pokédex number — 1 for Bulbasaur, 1025 for Pecharunt.',
+        format: 'int32',
+      })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(1).annotate({
+            expected: 'a value greater than or equal to 1',
+          }),
+        )
+        .check(
+          Schema.isLessThanOrEqualTo(1025).annotate({
+            expected: 'a value less than or equal to 1025',
+          }),
+        ),
+    ),
     name: Schema.String.annotate({
       description: 'Species name in lowercase (e.g. "bulbasaur").',
     })
@@ -716,24 +821,48 @@ export const PokemonVariant = Schema.Union([
       ]).annotate({ description: 'Pokemon elemental type.' }),
     ),
     baseStats: Schema.Struct({
-      hp: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      attack: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      defense: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      specialAttack: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      specialDefense: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
-      speed: Schema.Number.annotate({ format: 'int32' }).check(
-        Schema.isInt().annotate({ expected: 'an integer' }),
-      ),
+      hp: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      attack: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      defense: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      specialAttack: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      specialDefense: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
+      speed: Schema.Number.annotate({ format: 'int32' })
+        .check(Schema.isInt().annotate({ expected: 'an integer' }))
+        .check(
+          Schema.isGreaterThanOrEqualTo(0).annotate({
+            expected: 'a value greater than or equal to 0',
+          }),
+        ),
     }).annotate({ description: 'Six base stats shared by every Pokemon.' }),
     heightMetres: Schema.Number.annotate({
       description: 'Height in metres.',
@@ -790,6 +919,7 @@ export const PokemonVariant = Schema.Union([
   identifier: 'PokemonVariant',
 });
 export type CreatePokemonRequest = {
+  readonly nationalDexNumber?: number;
   readonly name: string;
   readonly primaryType:
     | 'bug'
@@ -843,6 +973,24 @@ export type CreatePokemonRequest = {
   readonly classification: 'normal' | 'legendary' | 'mythical';
 };
 export const CreatePokemonRequest = Schema.Struct({
+  nationalDexNumber: Schema.optionalKey(
+    Schema.Number.annotate({
+      description:
+        'National Pokédex number — 1 for Bulbasaur, 1025 for Pecharunt.',
+      format: 'int32',
+    })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(1).annotate({
+          expected: 'a value greater than or equal to 1',
+        }),
+      )
+      .check(
+        Schema.isLessThanOrEqualTo(1025).annotate({
+          expected: 'a value less than or equal to 1025',
+        }),
+      ),
+  ),
   name: Schema.String.check(
     Schema.isMinLength(1).annotate({
       expected: 'a value with a length of at least 1',
@@ -895,24 +1043,48 @@ export const CreatePokemonRequest = Schema.Struct({
     ]).annotate({ description: 'Pokemon elemental type.' }),
   ),
   baseStats: Schema.Struct({
-    hp: Schema.Number.annotate({ format: 'int32' }).check(
-      Schema.isInt().annotate({ expected: 'an integer' }),
-    ),
-    attack: Schema.Number.annotate({ format: 'int32' }).check(
-      Schema.isInt().annotate({ expected: 'an integer' }),
-    ),
-    defense: Schema.Number.annotate({ format: 'int32' }).check(
-      Schema.isInt().annotate({ expected: 'an integer' }),
-    ),
-    specialAttack: Schema.Number.annotate({ format: 'int32' }).check(
-      Schema.isInt().annotate({ expected: 'an integer' }),
-    ),
-    specialDefense: Schema.Number.annotate({ format: 'int32' }).check(
-      Schema.isInt().annotate({ expected: 'an integer' }),
-    ),
-    speed: Schema.Number.annotate({ format: 'int32' }).check(
-      Schema.isInt().annotate({ expected: 'an integer' }),
-    ),
+    hp: Schema.Number.annotate({ format: 'int32' })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(0).annotate({
+          expected: 'a value greater than or equal to 0',
+        }),
+      ),
+    attack: Schema.Number.annotate({ format: 'int32' })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(0).annotate({
+          expected: 'a value greater than or equal to 0',
+        }),
+      ),
+    defense: Schema.Number.annotate({ format: 'int32' })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(0).annotate({
+          expected: 'a value greater than or equal to 0',
+        }),
+      ),
+    specialAttack: Schema.Number.annotate({ format: 'int32' })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(0).annotate({
+          expected: 'a value greater than or equal to 0',
+        }),
+      ),
+    specialDefense: Schema.Number.annotate({ format: 'int32' })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(0).annotate({
+          expected: 'a value greater than or equal to 0',
+        }),
+      ),
+    speed: Schema.Number.annotate({ format: 'int32' })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(0).annotate({
+          expected: 'a value greater than or equal to 0',
+        }),
+      ),
   }).annotate({ description: 'Six base stats shared by every Pokemon.' }),
   heightMetres: Schema.Number.annotate({ format: 'float' })
     .check(Schema.isFinite().annotate({ expected: 'a finite number' }))
@@ -941,7 +1113,8 @@ export const CreatePokemonRequest = Schema.Struct({
 });
 export type PokemonId = number;
 export const PokemonId = Schema.Number.annotate({
-  description: 'A National Pokédex number, or a generated id.',
+  description:
+    'Identifies an entry in this Pokédex. Unique; allocated by the server.',
   format: 'int32',
 })
   .check(Schema.isInt().annotate({ expected: 'an integer' }))
@@ -952,6 +1125,7 @@ export const PokemonId = Schema.Number.annotate({
     }),
   );
 export type UpdatePokemonRequest = {
+  readonly nationalDexNumber?: number;
   readonly name: string;
   readonly primaryType:
     | 'bug'
@@ -1005,6 +1179,24 @@ export type UpdatePokemonRequest = {
   readonly classification: 'normal' | 'legendary' | 'mythical';
 };
 export const UpdatePokemonRequest = Schema.Struct({
+  nationalDexNumber: Schema.optionalKey(
+    Schema.Number.annotate({
+      description:
+        'National Pokédex number — 1 for Bulbasaur, 1025 for Pecharunt.',
+      format: 'int32',
+    })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(1).annotate({
+          expected: 'a value greater than or equal to 1',
+        }),
+      )
+      .check(
+        Schema.isLessThanOrEqualTo(1025).annotate({
+          expected: 'a value less than or equal to 1025',
+        }),
+      ),
+  ),
   name: Schema.String.check(
     Schema.isMinLength(1).annotate({
       expected: 'a value with a length of at least 1',
@@ -1057,24 +1249,48 @@ export const UpdatePokemonRequest = Schema.Struct({
     ]).annotate({ description: 'Pokemon elemental type.' }),
   ),
   baseStats: Schema.Struct({
-    hp: Schema.Number.annotate({ format: 'int32' }).check(
-      Schema.isInt().annotate({ expected: 'an integer' }),
-    ),
-    attack: Schema.Number.annotate({ format: 'int32' }).check(
-      Schema.isInt().annotate({ expected: 'an integer' }),
-    ),
-    defense: Schema.Number.annotate({ format: 'int32' }).check(
-      Schema.isInt().annotate({ expected: 'an integer' }),
-    ),
-    specialAttack: Schema.Number.annotate({ format: 'int32' }).check(
-      Schema.isInt().annotate({ expected: 'an integer' }),
-    ),
-    specialDefense: Schema.Number.annotate({ format: 'int32' }).check(
-      Schema.isInt().annotate({ expected: 'an integer' }),
-    ),
-    speed: Schema.Number.annotate({ format: 'int32' }).check(
-      Schema.isInt().annotate({ expected: 'an integer' }),
-    ),
+    hp: Schema.Number.annotate({ format: 'int32' })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(0).annotate({
+          expected: 'a value greater than or equal to 0',
+        }),
+      ),
+    attack: Schema.Number.annotate({ format: 'int32' })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(0).annotate({
+          expected: 'a value greater than or equal to 0',
+        }),
+      ),
+    defense: Schema.Number.annotate({ format: 'int32' })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(0).annotate({
+          expected: 'a value greater than or equal to 0',
+        }),
+      ),
+    specialAttack: Schema.Number.annotate({ format: 'int32' })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(0).annotate({
+          expected: 'a value greater than or equal to 0',
+        }),
+      ),
+    specialDefense: Schema.Number.annotate({ format: 'int32' })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(0).annotate({
+          expected: 'a value greater than or equal to 0',
+        }),
+      ),
+    speed: Schema.Number.annotate({ format: 'int32' })
+      .check(Schema.isInt().annotate({ expected: 'an integer' }))
+      .check(
+        Schema.isGreaterThanOrEqualTo(0).annotate({
+          expected: 'a value greater than or equal to 0',
+        }),
+      ),
   }).annotate({ description: 'Six base stats shared by every Pokemon.' }),
   heightMetres: Schema.Number.annotate({ format: 'float' })
     .check(Schema.isFinite().annotate({ expected: 'a finite number' }))

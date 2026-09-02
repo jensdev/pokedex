@@ -35,11 +35,22 @@ enum PokemonType {
 
 /** Six base stats shared by every Pokemon. */
 model PokemonBaseStats {
+  @minValue(0)
   hp: int32;
+
+  @minValue(0)
   attack: int32;
+
+  @minValue(0)
   defense: int32;
+
+  @minValue(0)
   specialAttack: int32;
+
+  @minValue(0)
   specialDefense: int32;
+
+  @minValue(0)
   speed: int32;
 }
 
@@ -53,12 +64,17 @@ model PokemonBaseStats {
  * string literal.
  */
 model PokemonBase {
-  // Deliberately uncapped: created entries get ids from 1026 upwards, above
-  // the National Pokedex range (parity decision P4). The `GET /pokemon/{id}`
-  // path parameter keeps its 1-1025 cap. See docs/migration/01-current-behavior-spec.md.
-  /** National Pokedex number (e.g. 1 for Bulbasaur), or a generated id. */
-  @minValue(1)
-  id: int32;
+  // The surrogate key. Uncapped here *and* on the `GET /pokemon/{id}` path
+  // parameter, so a created entry stays addressable — see `PokemonId` in
+  // models/common.tsp.
+  /** Identifies this entry. Unique; allocated by the server on create. */
+  id: PokemonId;
+
+  /**
+   * National Pokedex number, when this entry is a real Pokemon. Absent for
+   * entries invented through `POST /pokemon`.
+   */
+  nationalDexNumber?: NationalDexNumber;
 
   /** Species name in lowercase (e.g. "bulbasaur"). */
   @minLength(1)
@@ -161,6 +177,12 @@ union PokemonVariant {
 
 /** Payload for creating a new Pokemon entry. */
 model CreatePokemonRequest {
+  /**
+   * National Pokedex number, if this is a real Pokemon. Omit it for an
+   * invented one — the server never derives it from `id`.
+   */
+  nationalDexNumber?: NationalDexNumber;
+
   @minLength(1)
   @maxLength(100)
   name: string;
