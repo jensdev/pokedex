@@ -88,9 +88,14 @@ All three endpoints return hardcoded values (no real checks):
 
 ## Error responses (current reality vs. contract)
 
-The TypeSpec contract declares `ApiError { code, message, details? }` for error responses
-and an **empty-body 404**, but the NestJS app actually returns Nest's default exception
+The TypeSpec contract declared `ApiError { code, message, details? }` for error responses
+and an **empty-body 404**, but the NestJS app actually returned Nest's default exception
 bodies:
+
+*Both halves have since changed: 404s carry an `ApiError` body (D1), and the open `details?`
+bag was removed — nothing ever populated it, and `Record<string>` is emitted as
+`unevaluatedProperties` in OpenAPI 3.1+, which `effect`'s JSON Schema reader rejects. The
+current shape is `ApiError { code, message }`.*
 
 | Case | Current NestJS body | Contract says |
 | --- | --- | --- |

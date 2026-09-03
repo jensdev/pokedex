@@ -4,6 +4,13 @@ using TypeSpec.Http;
 
 namespace NestPokemon;
 
+// Deliberately has no open `details` bag. It carried `Record<string>`, which
+// TypeSpec emits as a model indexer — `additionalProperties` in OpenAPI 3.0 but
+// `unevaluatedProperties` in 3.1+, a keyword `effect`'s JSON Schema reader
+// rejects outright (`Unsupported JSON Schema keyword`). That single optional
+// field, which no handler ever populated, was the only thing keeping this
+// contract on 3.0. If structured error context is wanted later, give it a
+// model with named fields rather than an indexer.
 /** Standard error returned for all 4xx/5xx responses. */
 @error
 model ApiError {
@@ -12,9 +19,6 @@ model ApiError {
 
   /** Human-readable error message. */
   message: string;
-
-  /** Optional additional context about the error. */
-  details?: Record<string>;
 }
 
 // `ApiError` with `code` pinned to the one value a given status uses.
@@ -39,9 +43,6 @@ model CodedApiError<Code extends string> {
 
   /** Human-readable error message. */
   message: string;
-
-  /** Optional additional context about the error. */
-  details?: Record<string>;
 }
 
 // The id is a surrogate key and is deliberately uncapped (decision D2): it

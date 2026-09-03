@@ -94,21 +94,12 @@ export const HealthResponse = Schema.Struct({
   description: 'Response body for health check endpoints.',
   identifier: 'HealthResponse',
 });
-export type ApiError = {
-  readonly code: string;
-  readonly message: string;
-  readonly details?: { readonly [x: string]: string };
-};
+export type ApiError = { readonly code: string; readonly message: string };
 export const ApiError = Schema.Struct({
   code: Schema.String.annotate({ description: 'Machine-readable error code.' }),
   message: Schema.String.annotate({
     description: 'Human-readable error message.',
   }),
-  details: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.String).annotate({
-      description: 'Optional additional context about the error.',
-    }),
-  ),
 }).annotate({
   description: 'Standard error returned for all 4xx/5xx responses.',
   identifier: 'ApiError',
@@ -1323,7 +1314,6 @@ export const HealthCheck200 = HealthResponse;
 export type HealthCheck400 = {
   readonly code: 'BAD_REQUEST';
   readonly message: string;
-  readonly details?: { readonly [x: string]: string };
 };
 export const HealthCheck400 = Schema.Struct({
   code: Schema.Literal('BAD_REQUEST').annotate({
@@ -1332,11 +1322,6 @@ export const HealthCheck400 = Schema.Struct({
   message: Schema.String.annotate({
     description: 'Human-readable error message.',
   }),
-  details: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.String).annotate({
-      description: 'Optional additional context about the error.',
-    }),
-  ),
 }).annotate({
   description:
     'An `ApiError` whose `code` is fixed to the one this status uses.',
@@ -1348,7 +1333,6 @@ export const HealthLiveness200 = LivenessResponse;
 export type HealthLiveness400 = {
   readonly code: 'BAD_REQUEST';
   readonly message: string;
-  readonly details?: { readonly [x: string]: string };
 };
 export const HealthLiveness400 = Schema.Struct({
   code: Schema.Literal('BAD_REQUEST').annotate({
@@ -1357,11 +1341,6 @@ export const HealthLiveness400 = Schema.Struct({
   message: Schema.String.annotate({
     description: 'Human-readable error message.',
   }),
-  details: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.String).annotate({
-      description: 'Optional additional context about the error.',
-    }),
-  ),
 }).annotate({
   description:
     'An `ApiError` whose `code` is fixed to the one this status uses.',
@@ -1373,7 +1352,6 @@ export const HealthReadiness200 = HealthResponse;
 export type HealthReadiness400 = {
   readonly code: 'BAD_REQUEST';
   readonly message: string;
-  readonly details?: { readonly [x: string]: string };
 };
 export const HealthReadiness400 = Schema.Struct({
   code: Schema.Literal('BAD_REQUEST').annotate({
@@ -1382,11 +1360,6 @@ export const HealthReadiness400 = Schema.Struct({
   message: Schema.String.annotate({
     description: 'Human-readable error message.',
   }),
-  details: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.String).annotate({
-      description: 'Optional additional context about the error.',
-    }),
-  ),
 }).annotate({
   description:
     'An `ApiError` whose `code` is fixed to the one this status uses.',
@@ -1513,7 +1486,6 @@ export const ListPokemon200 = Schema.Struct({
 export type ListPokemon400 = {
   readonly code: 'BAD_REQUEST';
   readonly message: string;
-  readonly details?: { readonly [x: string]: string };
 };
 export const ListPokemon400 = Schema.Struct({
   code: Schema.Literal('BAD_REQUEST').annotate({
@@ -1522,11 +1494,6 @@ export const ListPokemon400 = Schema.Struct({
   message: Schema.String.annotate({
     description: 'Human-readable error message.',
   }),
-  details: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.String).annotate({
-      description: 'Optional additional context about the error.',
-    }),
-  ),
 }).annotate({
   description:
     'An `ApiError` whose `code` is fixed to the one this status uses.',
@@ -1540,7 +1507,6 @@ export const CreatePokemon201 = PokemonVariant;
 export type CreatePokemon400 = {
   readonly code: 'BAD_REQUEST';
   readonly message: string;
-  readonly details?: { readonly [x: string]: string };
 };
 export const CreatePokemon400 = Schema.Struct({
   code: Schema.Literal('BAD_REQUEST').annotate({
@@ -1549,11 +1515,6 @@ export const CreatePokemon400 = Schema.Struct({
   message: Schema.String.annotate({
     description: 'Human-readable error message.',
   }),
-  details: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.String).annotate({
-      description: 'Optional additional context about the error.',
-    }),
-  ),
 }).annotate({
   description:
     'An `ApiError` whose `code` is fixed to the one this status uses.',
@@ -1567,7 +1528,6 @@ export const GetPokemonById200 = PokemonVariant;
 export type GetPokemonById400 = {
   readonly code: 'BAD_REQUEST';
   readonly message: string;
-  readonly details?: { readonly [x: string]: string };
 };
 export const GetPokemonById400 = Schema.Struct({
   code: Schema.Literal('BAD_REQUEST').annotate({
@@ -1576,11 +1536,6 @@ export const GetPokemonById400 = Schema.Struct({
   message: Schema.String.annotate({
     description: 'Human-readable error message.',
   }),
-  details: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.String).annotate({
-      description: 'Optional additional context about the error.',
-    }),
-  ),
 }).annotate({
   description:
     'An `ApiError` whose `code` is fixed to the one this status uses.',
@@ -1588,7 +1543,6 @@ export const GetPokemonById400 = Schema.Struct({
 export type GetPokemonById404 = {
   readonly code: 'POKEMON_NOT_FOUND';
   readonly message: string;
-  readonly details?: { readonly [x: string]: string };
 };
 export const GetPokemonById404 = Schema.Struct({
   code: Schema.Literal('POKEMON_NOT_FOUND').annotate({
@@ -1597,11 +1551,6 @@ export const GetPokemonById404 = Schema.Struct({
   message: Schema.String.annotate({
     description: 'Human-readable error message.',
   }),
-  details: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.String).annotate({
-      description: 'Optional additional context about the error.',
-    }),
-  ),
 }).annotate({
   description:
     'An `ApiError` whose `code` is fixed to the one this status uses.',
@@ -1617,7 +1566,6 @@ export const ReplacePokemon200 = PokemonVariant;
 export type ReplacePokemon400 = {
   readonly code: 'BAD_REQUEST';
   readonly message: string;
-  readonly details?: { readonly [x: string]: string };
 };
 export const ReplacePokemon400 = Schema.Struct({
   code: Schema.Literal('BAD_REQUEST').annotate({
@@ -1626,11 +1574,6 @@ export const ReplacePokemon400 = Schema.Struct({
   message: Schema.String.annotate({
     description: 'Human-readable error message.',
   }),
-  details: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.String).annotate({
-      description: 'Optional additional context about the error.',
-    }),
-  ),
 }).annotate({
   description:
     'An `ApiError` whose `code` is fixed to the one this status uses.',
@@ -1638,7 +1581,6 @@ export const ReplacePokemon400 = Schema.Struct({
 export type ReplacePokemon404 = {
   readonly code: 'POKEMON_NOT_FOUND';
   readonly message: string;
-  readonly details?: { readonly [x: string]: string };
 };
 export const ReplacePokemon404 = Schema.Struct({
   code: Schema.Literal('POKEMON_NOT_FOUND').annotate({
@@ -1647,11 +1589,6 @@ export const ReplacePokemon404 = Schema.Struct({
   message: Schema.String.annotate({
     description: 'Human-readable error message.',
   }),
-  details: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.String).annotate({
-      description: 'Optional additional context about the error.',
-    }),
-  ),
 }).annotate({
   description:
     'An `ApiError` whose `code` is fixed to the one this status uses.',
@@ -1663,7 +1600,6 @@ export const DeletePokemonPathParams = Schema.Struct({ id: PokemonId });
 export type DeletePokemon400 = {
   readonly code: 'BAD_REQUEST';
   readonly message: string;
-  readonly details?: { readonly [x: string]: string };
 };
 export const DeletePokemon400 = Schema.Struct({
   code: Schema.Literal('BAD_REQUEST').annotate({
@@ -1672,11 +1608,6 @@ export const DeletePokemon400 = Schema.Struct({
   message: Schema.String.annotate({
     description: 'Human-readable error message.',
   }),
-  details: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.String).annotate({
-      description: 'Optional additional context about the error.',
-    }),
-  ),
 }).annotate({
   description:
     'An `ApiError` whose `code` is fixed to the one this status uses.',
@@ -1684,7 +1615,6 @@ export const DeletePokemon400 = Schema.Struct({
 export type DeletePokemon404 = {
   readonly code: 'POKEMON_NOT_FOUND';
   readonly message: string;
-  readonly details?: { readonly [x: string]: string };
 };
 export const DeletePokemon404 = Schema.Struct({
   code: Schema.Literal('POKEMON_NOT_FOUND').annotate({
@@ -1693,11 +1623,6 @@ export const DeletePokemon404 = Schema.Struct({
   message: Schema.String.annotate({
     description: 'Human-readable error message.',
   }),
-  details: Schema.optionalKey(
-    Schema.Record(Schema.String, Schema.String).annotate({
-      description: 'Optional additional context about the error.',
-    }),
-  ),
 }).annotate({
   description:
     'An `ApiError` whose `code` is fixed to the one this status uses.',
